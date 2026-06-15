@@ -3,7 +3,7 @@
 > 세션이 길어져도 개발 맥락을 잃지 않기 위한 **단일 요약 문서**.
 > **운영 규칙**: 큰 작업/슬라이스를 마칠 때마다, 그리고 세션 종료 시 이 문서를 갱신한다. "다음 세션 시작 프롬프트"는 항상 최신화한다.
 >
-> 최종 업데이트: **2026-06-15** / 업데이트 주체: P5 관리자 대시보드 완료
+> 최종 업데이트: **2026-06-15** / 업데이트 주체: P6 공공 API 연동 완료
 
 ---
 
@@ -38,14 +38,18 @@
 - **P5 관리자 대시보드 완료**: 빌드 19개 라우트 정상.
   - T-050: `lib/sample/admin.ts` (샘플 stats·plans), `app/api/admin/stats/route.ts` (집계), `app/api/admin/plans/route.ts` (목록·기관 필터), `components/admin/StatsCards.tsx`, `components/admin/RecentPlanList.tsx`, `components/admin/InstitutionCard.tsx`, `app/admin/page.tsx` (force-dynamic, 통계+계획목록+기관목록).
   - T-051: `app/admin/institutions/[id]/page.tsx` (기관 상세 + 계획 이력), `app/api/admin/plans?institution_id` 기관 필터 지원.
-  - 스모크 테스트 S0→S9 **25/25 통과** (2026-06-15).
-- typecheck + build 통과(19개 라우트).
+- **P6 공공 API 연동 완료**: 빌드 23개 라우트 정상.
+  - T-060: `lib/external/geocode.ts` (Kakao Local API, 샘플 fallback) + `app/api/external/geocode/route.ts` + InstitutionForm 자동채움 버튼.
+  - T-061: `lib/external/weather.ts` (KMA 초단기예보, Lambert 좌표변환, feels_like 계산, 샘플 fallback) + `app/api/external/weather/route.ts` + `buildAiInput` WeatherContext 주입.
+  - T-062: `lib/external/impactForecast.ts` (기상청 폭염영향예보, 샘플 fallback) + `lib/external/disasterSms.ts` (행안부 긴급재난문자, 샘플 fallback) + `app/api/external/disaster-sms/route.ts` + `app/api/external/weather/impact/route.ts` + MessageInput '실시간 조회' 탭 추가.
+  - wizard.ts에 `disaster_message_source: 'api'` 추가.
+  - 스모크 테스트 S0→P6 **30/30 통과** (2026-06-15).
+- typecheck + build 통과(23개 라우트).
 
 ## 진행 중 기능
-- (없음) — P0~P4 데모 본선 완료.
+- (없음) — P0~P6 완료.
 
 ## 다음 작업
-- **P6 공공 API(T-060~063, 가산점)**: 기상청 단기예보 API → weather_context 주입.
 - **P7 배포(T-070~072)**: Vercel + Supabase 프로덕션, 환경변수 세팅.
 - hooks 적용: `.claude/settings.json` 검토. `docs/10_HARNESS_PLAN.md` §3 참조.
 
@@ -87,12 +91,17 @@
 - `POST /api/plan/generate` — Claude claude-haiku-4-5-20251001 호출, 12s 타임아웃, 1회 재시도, 샘플 fallback. ANTHROPIC_API_KEY 미설정 시 샘플 즉시 반환.
 - `PATCH /api/plan/[requestId]/checklist/[itemId]` — 체크리스트 토글.
 - `GET|POST /api/plan/[requestId]/after-action` — 사후기록 조회/저장(upsert). 샘플 모드 + DB 실패 시 graceful 처리.
+- `GET /api/admin/stats`, `GET /api/admin/plans` — 관리자 집계/목록.
+- `GET /api/external/geocode?query=` — Kakao Local API 주소→좌표. GEOCODE_API_KEY 미설정 시 샘플 좌표.
+- `GET /api/external/weather?lat=&lng=` — KMA 초단기예보 → 실온/체감온도/습도. KMA_API_KEY 미설정 시 샘플.
+- `GET /api/external/disaster-sms?sido=` — 행안부 긴급재난문자. MOIS_DISASTER_API_KEY 미설정 시 샘플 3종.
+- `GET /api/external/weather/impact?sido=` — 기상청 폭염영향예보. KMA_API_KEY 미설정 시 샘플.
 - 모든 라우트: service_role 키 사용, `USE_SAMPLE_FALLBACK=true` 시 즉시 샘플 반환.
-- 공공 API 미연동 (P6 예정).
 
 ## 마지막 정상 시연 흐름
-- **2026-06-15** — `USE_SAMPLE_FALLBACK=true` 오프라인 모드로 S0→S9 스모크 테스트 **25/25 통과**.
+- **2026-06-15** — `USE_SAMPLE_FALLBACK=true` 오프라인 모드로 스모크 테스트 **30/30 통과** (P6 포함).
   - 경로: / → /institutions → /plan/new → /plan/new/message → /plan/new/situation → POST /api/plan/generate → /plan/[id] → PATCH checklist → /plan/[id]/after-action → POST after-action → /admin → /admin/institutions/[id]
+  - 공공 API: /api/external/geocode, /api/external/weather, /api/external/disaster-sms, /api/external/weather/impact 모두 샘플 fallback 동작 확인.
   - 스크립트: `USE_SAMPLE_FALLBACK=true node scripts/smoke-test.mjs`
   - PII 0건 확인, safety_disclaimer 고정 문구 주입 확인, 입력 검증(400) 확인, 관리자 stats/plans API 확인.
 
@@ -100,16 +109,16 @@
 ```
 재난안전MVP 작업을 이어간다. 먼저 CLAUDE.md와 docs/07_CONTEXT_LEDGER.md를 읽고 현재 상태를 파악하라.
 
-P0~P5 완료. 데모 본선(S0→S9) 전 흐름 구현 완성.
+P0~P6 완료. 데모 본선(S0→S9) + 공공 API fallback 구조 전부 완성.
 데모 흐름: / → /plan/new → /plan/new/message → /plan/new/situation → /plan/[id] → /plan/[id]/after-action → /admin → /admin/institutions/[id]
 
-빌드: 19개 라우트 정상(2026-06-15 기준). 스모크 테스트 25/25 통과.
-ANTHROPIC_API_KEY를 .env.local에 설정하면 실제 AI가 동작하고, 미설정 시 샘플 데이터로 전 흐름이 동작한다.
+빌드: 23개 라우트 정상(2026-06-15 기준). 스모크 테스트 30/30 통과.
+ANTHROPIC_API_KEY를 .env.local에 설정하면 실제 AI가 동작한다. 공공 API 키(KMA_API_KEY, GEOCODE_API_KEY, MOIS_DISASTER_API_KEY)는 미설정 시 샘플 데이터로 자동 전환된다.
 
 다음 작업 후보:
-  1. P6 공공 API(T-060~063, 가산점) — 기상청 단기예보 API → weather_context 주입.
-  2. P7 배포(T-070~072) — Vercel + Supabase 프로덕션, 환경변수 세팅.
-  3. P7 모바일 마감(T-071) — 반응형·로딩·에러 상태 점검.
+  1. P7 배포(T-070~072) — Vercel + Supabase 프로덕션, 환경변수 세팅.
+  2. 모바일 UI 최종 점검 — 반응형·로딩·에러 상태 개선.
+  3. 공모전 시연 스크립트 최종화 — docs/09_DEMO_SCRIPT.md 갱신.
 
 구현 전 반드시 관련 docs/를 먼저 읽고, /mvp-slice 절차를 따른다.
 완료 후 이 Ledger를 갱신한다.
