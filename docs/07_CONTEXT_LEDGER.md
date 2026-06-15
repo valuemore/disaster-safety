@@ -110,29 +110,38 @@
 - 모든 라우트: service_role 키 사용, `USE_SAMPLE_FALLBACK=true` 시 즉시 샘플 반환.
 
 ## 마지막 정상 시연 흐름
-- **2026-06-15** — `USE_SAMPLE_FALLBACK=true` 오프라인 모드로 스모크 테스트 **30/30 통과** (P6 포함).
+- **2026-06-15 (프로덕션)** — Vercel 프로덕션 스모크 테스트 **25/25 통과**.
+  - URL: https://disastersafety.vercel.app
   - 경로: / → /institutions → /plan/new → /plan/new/message → /plan/new/situation → POST /api/plan/generate → /plan/[id] → PATCH checklist → /plan/[id]/after-action → POST after-action → /admin → /admin/institutions/[id]
-  - 공공 API: /api/external/geocode, /api/external/weather, /api/external/disaster-sms, /api/external/weather/impact 모두 샘플 fallback 동작 확인.
+  - 공공 API 실 연동 확인:
+    - Kakao 지오코딩: **source:api** (서울종로구 → lat:37.57, lng:126.97)
+    - KMA 초단기예보: **source:api** (temp:20℃, feels_like:22.3℃, humidity:75%)
+    - KMA 폭염영향예보 V2: **source:api** (level:medium / 주의) ← 엔드포인트 수정 완료
+    - MOIS 재난문자: source:sample (MOIS_DISASTER_API_KEY 미설정 — 선택적)
+  - KMA 영향예보 엔드포인트 수정: `HeatWaveLifeIndex/getHeatWaveLifeIndex` → `ImpactInfoServiceV2/getHWImpactValueV2` (필수 파라미터: `tm`)
+  - 보건(취약인) 기준 필터링, 시도별 지역 필터, 최고 수준 선택 로직 적용.
+- **2026-06-15 (오프라인)** — `USE_SAMPLE_FALLBACK=true` 오프라인 모드로 스모크 테스트 **30/30 통과** (P6 포함).
   - 스크립트: `USE_SAMPLE_FALLBACK=true node scripts/smoke-test.mjs`
-  - PII 0건 확인, safety_disclaimer 고정 문구 주입 확인, 입력 검증(400) 확인, 관리자 stats/plans API 확인.
 
 ## 다음 세션 시작 프롬프트 (복붙용)
 ```
 재난안전MVP 작업을 이어간다. 먼저 CLAUDE.md와 docs/07_CONTEXT_LEDGER.md를 읽고 현재 상태를 파악하라.
 
-P0~P7 준비 완료. 빌드 23개 라우트 정상. 스모크 테스트 30/30 통과.
+P0~P7 완료. Vercel 프로덕션 배포 완료. 스모크 테스트 25/25 통과.
 
-남은 작업: Vercel 실 배포 (사용자 로그인 필요)
-  1. vercel login
-  2. GitHub 저장소 생성 + git push
-  3. vercel --prod (또는 Vercel 대시보드 GitHub 연결)
-  4. 환경변수 설정:
-     - ANTHROPIC_API_KEY (필수)
-     - NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (필수)
-     - KMA_API_KEY, GEOCODE_API_KEY, MOIS_DISASTER_API_KEY (선택, 미설정 시 샘플 fallback)
-     - USE_SAMPLE_FALLBACK=false (프로덕션)
-  5. Supabase SQL에서 supabase/seed.sql 실행
+배포 URL: https://disastersafety.vercel.app
+환경변수: 전부 설정 완료 (ANTHROPIC, Supabase, Kakao, KMA)
+공공 API:
+  - Kakao 지오코딩: source:api 정상
+  - KMA 초단기예보: source:api 정상
+  - KMA 폭염영향예보 V2 (ImpactInfoServiceV2/getHWImpactValueV2): source:api 정상
+  - MOIS 재난문자: 미설정 (샘플 fallback 동작 중, 선택적)
+DB: Supabase 연결 완료 (seed 데이터 미주입 — 실 데이터는 사용자 입력 시 누적)
+
+남은 선택 과제:
+  1. Supabase seed.sql 실행 (demo용 기관/프로필 데이터 주입)
+  2. MOIS 재난문자 API 키 설정 (MOIS_DISASTER_API_KEY)
+  3. 공모전 제출용 최종 시연 리허설 (docs/09_DEMO_SCRIPT.md)
 
 데모 흐름: / → /plan/new → /plan/new/message → /plan/new/situation → /plan/[id] → /plan/[id]/after-action → /admin
-시연 체크리스트: docs/09_DEMO_SCRIPT.md 참조
 ```

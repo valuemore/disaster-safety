@@ -20,6 +20,8 @@ export const ANTHROPIC_MODEL =
 /** 공공 API (서버 전용) */
 export const GEOCODE_API_KEY = process.env.GEOCODE_API_KEY ?? ''
 export const KMA_API_KEY = process.env.KMA_API_KEY ?? ''
+// 초단기예보 전용 키. 미설정 시 KMA_API_KEY로 fallback.
+export const KMA_WEATHER_API_KEY = process.env.KMA_WEATHER_API_KEY || process.env.KMA_API_KEY || ''
 export const MOIS_DISASTER_API_KEY = process.env.MOIS_DISASTER_API_KEY ?? ''
 export const CHILDCARE_API_KEY = process.env.CHILDCARE_API_KEY ?? ''
 export const KINDERGARTEN_API_KEY = process.env.KINDERGARTEN_API_KEY ?? ''

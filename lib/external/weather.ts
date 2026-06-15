@@ -1,6 +1,6 @@
 // 기상청 단기예보·초단기예보 서비스 (서버 전용)
 // KMA_API_KEY 없거나 실패 시 샘플 데이터 fallback
-import { USE_SAMPLE_FALLBACK, KMA_API_KEY } from '@/lib/env'
+import { USE_SAMPLE_FALLBACK, KMA_WEATHER_API_KEY } from '@/lib/env'
 
 const TIMEOUT_MS = 5_000
 
@@ -108,7 +108,7 @@ export async function fetchWeatherContext(
   lat: number | null | undefined,
   lng: number | null | undefined
 ): Promise<WeatherContext> {
-  if (USE_SAMPLE_FALLBACK || !KMA_API_KEY || lat == null || lng == null) {
+  if (USE_SAMPLE_FALLBACK || !KMA_WEATHER_API_KEY || lat == null || lng == null) {
     return { ...SAMPLE_WEATHER, observed_at: new Date().toISOString() }
   }
 
@@ -116,7 +116,7 @@ export async function fetchWeatherContext(
   const { baseDate, baseTime } = getBaseDateTime()
 
   const params = new URLSearchParams({
-    serviceKey: KMA_API_KEY,
+    serviceKey: KMA_WEATHER_API_KEY,
     numOfRows: '60',
     pageNo: '1',
     dataType: 'JSON',

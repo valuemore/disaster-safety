@@ -42,44 +42,58 @@ export async function fetchImpactForecast(sido?: string | null): Promise<ImpactF
     return { ...SAMPLE_IMPACT, valid_date: new Date().toISOString().slice(0, 10).replace(/-/g, '') }
   }
 
-  // 기상청 영향예보 API (폭염)
-  // https://apis.data.go.kr/1360000/HeatWaveLifeIndex/getHeatWaveLifeIndex
+  // 기상청 폭염 영향예보 API V2
+  // https://apis.data.go.kr/1360000/ImpactInfoServiceV2/getHWImpactValueV2
   const today = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   const dateStr = `${today.getFullYear()}${pad(today.getMonth() + 1)}${pad(today.getDate())}`
 
   const params = new URLSearchParams({
     serviceKey: KMA_API_KEY,
-    numOfRows: '10',
+    numOfRows: '200',
     pageNo: '1',
     dataType: 'JSON',
-    date: dateStr,
+    tm: dateStr,
   })
 
-  const url = `https://apis.data.go.kr/1360000/HeatWaveLifeIndex/getHeatWaveLifeIndex?${params}`
+  const url = `https://apis.data.go.kr/1360000/ImpactInfoServiceV2/getHWImpactValueV2?${params}`
 
   try {
     const res = await withTimeout(fetch(url), TIMEOUT_MS)
     if (!res.ok) throw new Error(`KMA impact ${res.status}`)
     const json = await res.json()
 
-    const items: Array<{ areaName: string; heatLevel: string; date: string }> =
+    const resultCode: string = json?.response?.header?.resultCode ?? ''
+    if (resultCode !== '00') throw new Error(`KMA resultCode ${resultCode}`)
+
+    const items: Array<{ regName: string; clsfc: string; value: string; tmEf: string }> =
       json?.response?.body?.items?.item ?? []
 
     if (items.length === 0) throw new Error('No items')
 
-    // sido가 있으면 해당 지역 우선, 없으면 전국 최고 수준
-    const target = sido
-      ? items.find((i) => i.areaName?.includes(sido.replace('특별시', '').replace('광역시', '').replace('특별자치시', '').trim()))
-      : null
-    const item = target ?? items[0]
+    // 보건(취약인) 기준 우선 (유아교육기관 대상), 없으면 보건(일반인)
+    const sidoNorm = sido?.replace('특별시', '').replace('광역시', '').replace('특별자치시', '').replace('특별자치도', '').trim()
+    const vulnerableItems = items.filter((i) => i.clsfc === '보건(취약인)')
+    const pool = vulnerableItems.length > 0 ? vulnerableItems : items
 
-    const level: ImpactLevel = LEVEL_MAP[item.heatLevel] ?? 'medium'
+    // sido가 있으면 지역 필터, 없으면 전체 중 최고 수준
+    const regionPool = sidoNorm
+      ? pool.filter((i) => i.regName?.includes(sidoNorm))
+      : pool
+    const targetPool = regionPool.length > 0 ? regionPool : pool
+
+    // 수준 우선순위: 위험 > 경고 > 주의 > 관심
+    const ORDER: Record<string, number> = { 위험: 4, 경고: 3, 주의: 2, 관심: 1 }
+    const best = targetPool.reduce((acc, cur) =>
+      (ORDER[cur.value] ?? 0) > (ORDER[acc.value] ?? 0) ? cur : acc
+    )
+
+    const level: ImpactLevel = LEVEL_MAP[best.value] ?? 'medium'
     return {
       level,
-      label: item.heatLevel,
+      label: best.value,
       description: SAMPLE_IMPACT.description,
-      valid_date: item.date ?? dateStr,
+      valid_date: best.tmEf ?? dateStr,
       source: 'api',
     }
   } catch (err) {
