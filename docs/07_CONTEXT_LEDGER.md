@@ -166,7 +166,12 @@
 - 추가 재난유형, Supabase Auth 실제 권한체계, 알림톡/재난문자 자동수신, 이미지/영상 분석, IoT — `docs/00_PRD.md` §7.
 
 ## 알려진 리스크
-- AI JSON 파싱 실패 → 재시도+샘플 fallback(`docs/04`).
+- AI JSON 파싱/타임아웃 실패 → **즉시** 재난유형별 샘플 fallback(`docs/04`). 재시도는 함수 504 유발로 제거(아래 참조).
+- **[2026-06-16 AI 디버깅 일련: ea2901a → 4cbe490 → fa4f0f0]**
+  - (1) fallback이 폭염 SAMPLE_AI_RESULT 고정이던 버그 → `sampleResultFor(disaster_type)`로 유형별 샘플 반환(ea2901a).
+  - (2) 5역할 role_based_actions 출력이 4096 토큰 초과로 잘림 → `max_tokens` 8192 상향(4cbe490).
+  - (3) 5역할 생성이 20s+ 소요 → 1차 timeout 후 재시도가 함수 30s를 초과해 504(FUNCTION_INVOCATION_TIMEOUT). **callClaude 재시도 제거(단일 시도, TIMEOUT 45s)** + `vercel.json` generate `maxDuration` 30→60s(fa4f0f0).
+- **[프로덕션 env]** ANTHROPIC_API_KEY **추가 완료** + ANTHROPIC_MODEL을 `claude-haiku-4-5-20251001`로 재설정. 실 AI 생성 정상 확인(감염병 ~45s=TIMEOUT 한계 → 간헐 샘플 fallback 가능, 폭염 ~31s, 둘 다 is_fallback=false). 실패 시 유형별 샘플로 안전(504 없음).
 - 공공 API 키 발급 지연/장애 → 샘플 모드 자동 전환(`docs/03`).
 - 시연 네트워크 불안정 → `USE_SAMPLE_FALLBACK=true` 오프라인 데모.
 - Next.js 16의 새 API 변경사항 → 구현 전 `node_modules/next/dist/docs/` 항상 확인.
