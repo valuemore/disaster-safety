@@ -16,6 +16,8 @@ interface FormState {
   sido: string
   sigungu: string
   dong: string
+  latitude: string
+  longitude: string
   total_children: string
   infant_count: string
   toddler_count: string
@@ -33,6 +35,8 @@ const INITIAL: FormState = {
   sido: '',
   sigungu: '',
   dong: '',
+  latitude: '',
+  longitude: '',
   total_children: '',
   infant_count: '',
   toddler_count: '',
@@ -52,6 +56,39 @@ export function InstitutionForm() {
   const router = useRouter()
   const [form, setForm] = useState<FormState>(INITIAL)
   const [loading, setLoading] = useState(false)
+  const [geocoding, setGeocoding] = useState(false)
+
+  async function handleGeocode() {
+    if (!form.address.trim()) {
+      toast.error('주소를 먼저 입력해 주세요.')
+      return
+    }
+    setGeocoding(true)
+    try {
+      const res = await fetch(`/api/external/geocode?query=${encodeURIComponent(form.address)}`)
+      const json = await res.json()
+      if (!res.ok || !json.data) {
+        toast.error('주소 변환 실패 — 시도/시군구/행정동을 직접 입력해 주세요.')
+        return
+      }
+      const d = json.data
+      setForm((prev) => ({
+        ...prev,
+        sido: d.sido ?? prev.sido,
+        sigungu: d.sigungu ?? prev.sigungu,
+        dong: d.dong ?? prev.dong,
+        latitude: d.lat != null ? String(d.lat) : prev.latitude,
+        longitude: d.lng != null ? String(d.lng) : prev.longitude,
+      }))
+      toast.success(
+        json.source === 'api' ? '주소가 자동으로 채워졌습니다.' : '샘플 좌표로 채워졌습니다 (키 미설정).'
+      )
+    } catch {
+      toast.error('주소 변환 중 오류가 발생했습니다.')
+    } finally {
+      setGeocoding(false)
+    }
+  }
 
   function setField<K extends keyof FormState>(key: K, val: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: val }))
@@ -73,6 +110,8 @@ export function InstitutionForm() {
           name: form.name.trim(),
           type: form.type,
           address: form.address || null,
+          latitude: form.latitude ? parseFloat(form.latitude) : null,
+          longitude: form.longitude ? parseFloat(form.longitude) : null,
           sido: form.sido || null,
           sigungu: form.sigungu || null,
           dong: form.dong || null,
@@ -150,14 +189,26 @@ export function InstitutionForm() {
               <label className="mb-1 block text-sm font-medium" htmlFor="address">
                 주소
               </label>
-              <input
-                id="address"
-                type="text"
-                placeholder="예: 서울특별시 강서구 화곡로 123"
-                value={form.address}
-                onChange={(e) => setField('address', e.target.value)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+              <div className="flex gap-2">
+                <input
+                  id="address"
+                  type="text"
+                  placeholder="예: 서울특별시 강서구 화곡로 123"
+                  value={form.address}
+                  onChange={(e) => setField('address', e.target.value)}
+                  className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGeocode}
+                  disabled={geocoding}
+                  className="shrink-0 text-xs"
+                >
+                  {geocoding ? '검색 중…' : '자동 채움'}
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">

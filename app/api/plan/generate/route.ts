@@ -3,6 +3,7 @@ import { USE_SAMPLE_FALLBACK } from '@/lib/env'
 import { buildAiInput } from '@/lib/ai/buildAiInput'
 import { callClaudeWithFallback } from '@/lib/ai/callClaude'
 import { SAFETY_DISCLAIMER_FIXED } from '@/lib/ai/aiPlanSchema'
+import { fetchWeatherContext, SAMPLE_WEATHER } from '@/lib/external/weather'
 import {
   SAMPLE_ACTION_REQUEST,
   SAMPLE_INSTITUTIONS,
@@ -78,8 +79,14 @@ export async function POST(req: NextRequest) {
     profile = SAMPLE_HEATWAVE_PROFILES[0] as HeatwaveProfile
   }
 
+  // ── 날씨 컨텍스트 조회 (실패 시 샘플) ─────────────────────────────────
+  const weatherContext = await fetchWeatherContext(
+    institution.latitude,
+    institution.longitude
+  ).catch(() => ({ ...SAMPLE_WEATHER }))
+
   // ── AI 호출 ────────────────────────────────────────────────────────────
-  const aiInput = buildAiInput(body, institution, profile)
+  const aiInput = buildAiInput(body, institution, profile, weatherContext)
   const { result, is_fallback, model } = await callClaudeWithFallback(aiInput)
 
   // safety_disclaimer 고정 주입 (모든 경로)

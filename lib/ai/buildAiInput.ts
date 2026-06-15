@@ -1,6 +1,9 @@
 // AI 입력 빌더 — 화이트리스트 필드만 직렬화, PII 0건 (docs/04 §1)
 import type { Institution, HeatwaveProfile } from '@/lib/types/db'
 import type { WizardDraft } from '@/lib/types/wizard'
+import type { WeatherContext } from '@/lib/external/weather'
+
+export type { WeatherContext }
 
 export interface AiInput {
   disaster_type: 'heatwave'
@@ -37,13 +40,14 @@ export interface AiInput {
   }
   selected_situations: string[]
   situation_etc: string | null
-  weather_context?: { source: 'sample' }
+  weather_context: WeatherContext
 }
 
 export function buildAiInput(
   draft: WizardDraft,
   institution: Institution,
-  profile: HeatwaveProfile
+  profile: HeatwaveProfile,
+  weatherContext: WeatherContext
 ): AiInput {
   // 화이트리스트만 포함 — PII(이름·진단명·약물명·연락처) 컬럼은 DB 스키마 자체에 없음
   return {
@@ -81,6 +85,6 @@ export function buildAiInput(
     },
     selected_situations: draft.selected_situations,
     situation_etc: draft.situation_etc || null,
-    weather_context: { source: 'sample' }, // P6(T-061)에서 실데이터로 교체
+    weather_context: weatherContext,
   }
 }
