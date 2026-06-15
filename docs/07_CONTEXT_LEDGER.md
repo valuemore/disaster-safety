@@ -3,7 +3,7 @@
 > 세션이 길어져도 개발 맥락을 잃지 않기 위한 **단일 요약 문서**.
 > **운영 규칙**: 큰 작업/슬라이스를 마칠 때마다, 그리고 세션 종료 시 이 문서를 갱신한다. "다음 세션 시작 프롬프트"는 항상 최신화한다.
 >
-> 최종 업데이트: **2026-06-15** / 업데이트 주체: P6 공공 API 연동 완료
+> 최종 업데이트: **2026-06-15** / 업데이트 주체: P7 모바일 마감·배포 준비 완료
 
 ---
 
@@ -46,12 +46,23 @@
   - 스모크 테스트 S0→P6 **30/30 통과** (2026-06-15).
 - typecheck + build 통과(23개 라우트).
 
+## 완료된 기능 (P7 추가)
+- **P7 시연 폴리시·배포 준비 완료** (2026-06-15):
+  - T-070: 스모크 테스트 30/30 통과 (USE_SAMPLE_FALLBACK=true 오프라인 모드).
+  - T-071: AppHeader 모바일 개선(xs 화면 nav 축약, 역할배지 sm+, "기관 관리" 모바일 숨김). `/plan/[requestId]/loading.tsx` 생성(대응계획 생성 대기 스켈레톤).
+  - T-072: `docs/09_DEMO_SCRIPT.md` 배포 URL·P6 시연 포인트·체크리스트 갱신.
+  - T-073: `vercel.json` 생성(AI route 30s, 외부 API 15s maxDuration). Vercel CLI 설치 완료. GitHub 원격 저장소 연결 + `vercel` 실행은 사용자 로그인 필요.
+
 ## 진행 중 기능
-- (없음) — P0~P6 완료.
+- (없음) — P0~P7 준비 완료, Vercel 배포 실행만 남음.
 
 ## 다음 작업
-- **P7 배포(T-070~072)**: Vercel + Supabase 프로덕션, 환경변수 세팅.
-- hooks 적용: `.claude/settings.json` 검토. `docs/10_HARNESS_PLAN.md` §3 참조.
+- **Vercel 배포 실행** (사용자 직접):
+  1. `! vercel login` (터미널에서 직접)
+  2. GitHub 저장소 생성 후 `git remote add origin <URL> && git push -u origin master`
+  3. `! vercel --prod` 또는 Vercel 대시보드에서 GitHub 저장소 연결
+  4. Vercel 환경변수 설정 (아래 §API 연동 상태 참조)
+  5. Supabase에서 `supabase/seed.sql` 실행
 
 ## 주요 결정사항
 - create-next-app 16.x가 CLAUDE.md를 생성(`@AGENTS.md` 포인터) → 우리 CLAUDE.md에 `@AGENTS.md` 포함으로 병합. D-009 기록.
@@ -109,17 +120,19 @@
 ```
 재난안전MVP 작업을 이어간다. 먼저 CLAUDE.md와 docs/07_CONTEXT_LEDGER.md를 읽고 현재 상태를 파악하라.
 
-P0~P6 완료. 데모 본선(S0→S9) + 공공 API fallback 구조 전부 완성.
-데모 흐름: / → /plan/new → /plan/new/message → /plan/new/situation → /plan/[id] → /plan/[id]/after-action → /admin → /admin/institutions/[id]
+P0~P7 준비 완료. 빌드 23개 라우트 정상. 스모크 테스트 30/30 통과.
 
-빌드: 23개 라우트 정상(2026-06-15 기준). 스모크 테스트 30/30 통과.
-ANTHROPIC_API_KEY를 .env.local에 설정하면 실제 AI가 동작한다. 공공 API 키(KMA_API_KEY, GEOCODE_API_KEY, MOIS_DISASTER_API_KEY)는 미설정 시 샘플 데이터로 자동 전환된다.
+남은 작업: Vercel 실 배포 (사용자 로그인 필요)
+  1. vercel login
+  2. GitHub 저장소 생성 + git push
+  3. vercel --prod (또는 Vercel 대시보드 GitHub 연결)
+  4. 환경변수 설정:
+     - ANTHROPIC_API_KEY (필수)
+     - NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (필수)
+     - KMA_API_KEY, GEOCODE_API_KEY, MOIS_DISASTER_API_KEY (선택, 미설정 시 샘플 fallback)
+     - USE_SAMPLE_FALLBACK=false (프로덕션)
+  5. Supabase SQL에서 supabase/seed.sql 실행
 
-다음 작업 후보:
-  1. P7 배포(T-070~072) — Vercel + Supabase 프로덕션, 환경변수 세팅.
-  2. 모바일 UI 최종 점검 — 반응형·로딩·에러 상태 개선.
-  3. 공모전 시연 스크립트 최종화 — docs/09_DEMO_SCRIPT.md 갱신.
-
-구현 전 반드시 관련 docs/를 먼저 읽고, /mvp-slice 절차를 따른다.
-완료 후 이 Ledger를 갱신한다.
+데모 흐름: / → /plan/new → /plan/new/message → /plan/new/situation → /plan/[id] → /plan/[id]/after-action → /admin
+시연 체크리스트: docs/09_DEMO_SCRIPT.md 참조
 ```
