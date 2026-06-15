@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "app/api/plan/generate/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/external/**": {
+      "maxDuration": 15
+    }
+  }
+}
