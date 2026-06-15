@@ -1,0 +1,74 @@
+# 08_DECISION_LOG — 결정 이력
+
+> 프로젝트 의사결정을 **append-only**로 기록한다(절대날짜 사용). 형식: 날짜 / 결정 / 이유 / 대안 / 영향.
+> 업데이트 시점: 의미 있는 결정이 생길 때마다.
+
+---
+
+### D-001 — 2026-06-15 — 1차 재난유형은 폭염만 구현
+- **결정**: MVP는 폭염만. 호우·대설·화재·감염병·미세먼지는 확장 문서로만.
+- **이유**: 공모전 데모 흐름을 한 유형으로 끝까지 안정화하는 것이 우선.
+- **대안**: 다유형 동시 구현(범위 과다, 시연 리스크↑) → 기각.
+- **영향**: `disaster_type` 컬럼/프롬프트 분기로 확장 여지만 확보. `docs/00`,`02`,`04`.
+
+### D-002 — 2026-06-15 — AI 제공자 = Anthropic Claude
+- **결정**: 기본 `claude-haiku-4-5`, 고품질 필요 시 `claude-sonnet-4-6`.
+- **이유**: JSON 출력 안정성·비용 효율·Claude Code 환경 일관성.
+- **대안**: OpenAI, 멀티 프로바이더 추상화(작업량↑) → 기각/보류.
+- **영향**: `docs/04`, env `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL`.
+
+### D-003 — 2026-06-15 — 인증 = 시연용 역할 선택
+- **결정**: 로그인 없이 역할(지자체/원장/담임/통학버스) 버튼 선택.
+- **이유**: 시연 흐름 단절 최소화, 인증 실패 리스크 제거.
+- **대안**: Supabase Auth → 운영 단계로 보류.
+- **영향**: `docs/02` RLS 단순화(서버 라우트 경유), `docs/05` 진입점.
+
+### D-004 — 2026-06-15 — 공공 API는 "가능한 많이" 연동(단, 전 기능 fallback 필수)
+- **결정**: 우선순위(주소·좌표 → 단기예보 → 영향예보/재난문자 → 기관정보)대로 단계 연동.
+- **이유**: 가산점 최대화. 단 데모 안정성은 절대 유지.
+- **대안**: 전부 샘플 → 가산점 약화. 무리한 전면 연동 → 데모 리스크. 절충 채택.
+- **영향**: `docs/03`. 모든 API 실패 시 샘플 자동 전환.
+
+### D-005 — 2026-06-15 — 저장소 = Supabase 우선 + 샘플 fallback
+- **결정**: 실제 Supabase PostgreSQL 사용, 실패 시 in-memory 샘플 시드.
+- **이유**: 실제 동작 입증 + 시연 무중단.
+- **영향**: `docs/02`.
+
+### D-006 — 2026-06-15 — 운영체계(Operating System) 세팅 도입
+- **결정**: CLAUDE.md(간결) + Context Ledger/Decision Log + Skills 5 + Subagents 6 + Harness/Hooks 설계 문서.
+- **이유**: 컨텍스트 효율·세션 연속성·역할 분리로 빠르고 안전한 개발.
+- **영향**: `CLAUDE.md`, `docs/07~10`, `.claude/skills`, `.claude/agents`.
+
+### D-007 — 2026-06-15 — Hooks는 P0 스캐폴딩 이후 적용
+- **결정**: 이번 라운드에 `.claude/settings.json` 미생성. `docs/10`에 설계만.
+- **이유**: prettier/tsc 등 도구가 아직 미설치 → 존재하지 않는 도구 호출 실패 방지.
+- **대안**: 가드 포함해 지금 작성 → 스캐폴딩 전엔 실질 무동작 → 보류.
+- **영향**: `docs/10`, 후속 P0 완료 시 적용 검토.
+
+### D-008 — 2026-06-15 — Subagent 모델 역할별 혼합
+- **결정**: builder/engineer = sonnet, planner/reviewer/qa = haiku.
+- **이유**: 품질 필요처(코드 생성)에만 고성능, 검토/계획/QA는 비용 효율.
+- **영향**: `.claude/agents/*.md` frontmatter `model`.
+
+### D-009 — 2026-06-15 — create-next-app 16.x CLAUDE.md 병합
+- **결정**: create-next-app 16.x가 `CLAUDE.md`(`@AGENTS.md` 포인터)와 `AGENTS.md`(Next.js 16 규칙)를 생성 → 우리 CLAUDE.md 앞에 `@AGENTS.md` 포함하여 병합. AGENTS.md는 보존.
+- **이유**: AI 코딩 보조 도구가 Next.js 16 변경사항을 항상 인지해야 함. create-next-app의 CLAUDE.md를 무시하면 AI가 잘못된 API를 사용할 위험.
+- **영향**: `CLAUDE.md`, `AGENTS.md` 파일 구조.
+
+### D-010 — 2026-06-15 — Tailwind CSS v4 (CSS-based config)
+- **결정**: Tailwind v4를 사용. `tailwind.config.js` 없음, `@import "tailwindcss"` + `@theme inline {}` CSS-based.
+- **이유**: create-next-app 16.x 기본 설정. shadcn 4.x도 Tailwind v4 지원.
+- **대안**: v3 downgrade → 필요 없음.
+- **영향**: `app/globals.css`, 커스텀 색상/테마는 CSS 변수로 관리.
+
+### D-011 — 2026-06-15 — shadcn `toast` deprecated → `sonner` 사용
+- **결정**: shadcn의 `toast` 컴포넌트 대신 `sonner`를 사용.
+- **이유**: shadcn 4.x에서 toast deprecated, sonner가 후속.
+- **영향**: `components/ui/sonner.tsx`, `app/layout.tsx`의 `<Toaster>`.
+
+### D-012 — 2026-06-15 — Next.js 16 구현 전 내장 docs 확인 원칙
+- **결정**: 모든 Next.js API 사용 전 `node_modules/next/dist/docs/`를 확인한다.
+- **이유**: AGENTS.md 경고: "This is NOT the Next.js you know. APIs, conventions, and file structure may all differ."
+- **영향**: CLAUDE.md 작업 규칙, 모든 구현 단계.
+
+<!-- 새 결정은 D-0xx로 아래에 append -->
