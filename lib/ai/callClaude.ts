@@ -12,7 +12,7 @@ import {
 } from '@/lib/sample'
 import type { AiInput } from './buildAiInput'
 
-const TIMEOUT_MS = 12_000
+const TIMEOUT_MS = 20_000 // 5역할·max_tokens 8192 생성 여유 (vercel AI route maxDuration 30s 내)
 
 // 재난유형별 샘플 결과 선택 — AI 실패/키부재 fallback이 유형에 맞는 본문을 반환하도록.
 // (이전: 폭염 SAMPLE_AI_RESULT 고정 + disaster_type만 덮어써 본문이 폭염으로 노출되던 버그 수정)
@@ -145,7 +145,9 @@ async function callOnce(
 ): Promise<string> {
   const response = await client.messages.create({
     model: ANTHROPIC_MODEL,
-    max_tokens: 4096,
+    // 5역할(role_based_actions) 출력은 3역할 대비 JSON이 커서 4096이면 잘림 →
+    // zod 검증 실패 → 재시도/샘플 fallback. 8192로 상향(haiku 지원 범위).
+    max_tokens: 8192,
     system: systemPrompt,
     messages: [
       { role: 'user', content: userContent },
