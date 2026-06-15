@@ -5,10 +5,30 @@ import { ANTHROPIC_API_KEY, ANTHROPIC_MODEL } from '@/lib/env'
 import { AiPlanSchema, SAFETY_DISCLAIMER_FIXED, type AiPlanResult } from './aiPlanSchema'
 import { ensureLegacyChecklists } from './legacyAdapter'
 import { buildSystemPrompt, OUTPUT_SCHEMA_HINT } from './buildSystemPrompt'
-import { SAMPLE_AI_RESULT } from '@/lib/sample'
+import {
+  SAMPLE_AI_RESULT,
+  SAMPLE_HEAVY_RAIN_AI_RESULT,
+  SAMPLE_INFECTION_AI_RESULT,
+} from '@/lib/sample'
 import type { AiInput } from './buildAiInput'
 
 const TIMEOUT_MS = 12_000
+
+// 재난유형별 샘플 결과 선택 — AI 실패/키부재 fallback이 유형에 맞는 본문을 반환하도록.
+// (이전: 폭염 SAMPLE_AI_RESULT 고정 + disaster_type만 덮어써 본문이 폭염으로 노출되던 버그 수정)
+function sampleResultFor(disasterType: AiInput['disaster_type']): AiPlanResult {
+  const base =
+    disasterType === 'heavy_rain'
+      ? SAMPLE_HEAVY_RAIN_AI_RESULT
+      : disasterType === 'infection'
+        ? SAMPLE_INFECTION_AI_RESULT
+        : SAMPLE_AI_RESULT
+  return {
+    ...(base as AiPlanResult),
+    disaster_type: disasterType,
+    safety_disclaimer: SAFETY_DISCLAIMER_FIXED,
+  } as AiPlanResult
+}
 
 function buildUserMessage(input: AiInput): string {
   return `${OUTPUT_SCHEMA_HINT}
@@ -54,7 +74,7 @@ export interface CallClaudeResult {
 export async function callClaudeWithFallback(input: AiInput): Promise<CallClaudeResult> {
   if (!ANTHROPIC_API_KEY) {
     return {
-      result: { ...SAMPLE_AI_RESULT, disaster_type: input.disaster_type } as AiPlanResult,
+      result: sampleResultFor(input.disaster_type),
       is_fallback: true,
       model: 'sample',
     }
@@ -110,9 +130,9 @@ export async function callClaudeWithFallback(input: AiInput): Promise<CallClaude
     console.warn('[callClaude] 2차 재시도 실패:', err)
   }
 
-  // 샘플 fallback (docs/04 §5 5번)
+  // 샘플 fallback (docs/04 §5 5번) — 재난유형별 본문 반환
   return {
-    result: { ...SAMPLE_AI_RESULT, disaster_type: input.disaster_type } as AiPlanResult,
+    result: sampleResultFor(input.disaster_type),
     is_fallback: true,
     model: 'sample',
   }
