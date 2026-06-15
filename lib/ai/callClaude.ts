@@ -12,7 +12,7 @@ import {
 } from '@/lib/sample'
 import type { AiInput } from './buildAiInput'
 
-const TIMEOUT_MS = 20_000 // 5역할·max_tokens 8192 생성 여유 (vercel AI route maxDuration 30s 내)
+const TIMEOUT_MS = 45_000 // 5역할 생성은 20s+ 소요 → 함수 maxDuration 60s 내 1회 시도(재시도 없음)
 
 // 재난유형별 샘플 결과 선택 — AI 실패/키부재 fallback이 유형에 맞는 본문을 반환하도록.
 // (이전: 폭염 SAMPLE_AI_RESULT 고정 + disaster_type만 덮어써 본문이 폭염으로 노출되던 버그 수정)
@@ -35,15 +35,6 @@ function buildUserMessage(input: AiInput): string {
 
 [입력 데이터]
 ${JSON.stringify(input, null, 2)}`
-}
-
-function buildRetryMessage(prevOutput: string): string {
-  return `직전 출력이 JSON 스키마를 위반했습니다. 아래 형식을 정확히 따라 JSON만 다시 출력하세요.
-
-${OUTPUT_SCHEMA_HINT}
-
-직전 출력:
-${prevOutput.slice(0, 500)}`
 }
 
 function extractJson(text: string): string {
@@ -83,19 +74,17 @@ export async function callClaudeWithFallback(input: AiInput): Promise<CallClaude
   const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
   // 재난유형별 시스템 프롬프트 조립 (T8-3)
   const systemPrompt = buildSystemPrompt(input.disaster_type)
-  let lastRawText = ''
 
-  // 1차 시도
+  // 단일 시도 — 5역할 생성은 20s+ 소요하므로, 재시도는 함수 maxDuration(60s)을
+  // 초과(504)시킨다. 1차 실패(타임아웃/파싱/zod) 시 즉시 재난유형별 샘플 fallback.
   try {
     const raw = await withTimeout(
       callOnce(client, systemPrompt, buildUserMessage(input)),
       TIMEOUT_MS
     )
-    lastRawText = raw
     const parsed = AiPlanSchema.safeParse(JSON.parse(extractJson(raw)))
     if (parsed.success) {
-      // ensureLegacyChecklists returns db.ts::AiPlanResult (disaster_type optional)
-      // but parsed.data is Zod-validated so disaster_type is always present — safe cast
+      // parsed.data는 Zod 검증 완료 → disaster_type 항상 존재, safe cast
       const withLegacy = ensureLegacyChecklists(parsed.data) as AiPlanResult
       return {
         result: { ...withLegacy, safety_disclaimer: SAFETY_DISCLAIMER_FIXED },
@@ -104,30 +93,9 @@ export async function callClaudeWithFallback(input: AiInput): Promise<CallClaude
         raw_text: raw,
       }
     }
-    console.warn('[callClaude] zod 검증 실패, 재시도')
+    console.warn('[callClaude] zod 검증 실패, 샘플 fallback')
   } catch (err) {
-    console.warn('[callClaude] 1차 시도 실패:', err)
-  }
-
-  // 2차 재시도 (docs/04 §5 4번)
-  try {
-    const raw = await withTimeout(
-      callOnce(client, systemPrompt, buildRetryMessage(lastRawText)),
-      TIMEOUT_MS
-    )
-    const parsed = AiPlanSchema.safeParse(JSON.parse(extractJson(raw)))
-    if (parsed.success) {
-      const withLegacy = ensureLegacyChecklists(parsed.data) as AiPlanResult
-      return {
-        result: { ...withLegacy, safety_disclaimer: SAFETY_DISCLAIMER_FIXED },
-        is_fallback: false,
-        model: ANTHROPIC_MODEL,
-        raw_text: raw,
-      }
-    }
-    console.warn('[callClaude] 재시도도 zod 검증 실패, 샘플 fallback')
-  } catch (err) {
-    console.warn('[callClaude] 2차 재시도 실패:', err)
+    console.warn('[callClaude] AI 시도 실패, 샘플 fallback:', err)
   }
 
   // 샘플 fallback (docs/04 §5 5번) — 재난유형별 본문 반환
