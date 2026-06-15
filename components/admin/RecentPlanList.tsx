@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DISASTER_REGISTRY } from '@/lib/disaster/registry'
 import type { AdminPlanRow } from '@/lib/sample/admin'
+import type { DisasterType } from '@/lib/types/db'
 
 const PRIORITY_LABEL: Record<string, string> = {
   high: '높음',
@@ -20,6 +21,23 @@ const ROLE_LABEL: Record<string, string> = {
   teacher: '담임교사',
   shuttle: '통학버스',
   admin: '관리자',
+}
+
+const DISASTER_TYPE_CLASS: Record<DisasterType, string> = {
+  heatwave: 'bg-orange-100 text-orange-700',
+  heavy_rain: 'bg-blue-100 text-blue-700',
+  infection: 'bg-emerald-100 text-emerald-700',
+}
+
+function DisasterTypeBadge({ type }: { type?: DisasterType | null }) {
+  if (!type) return null
+  const entry = DISASTER_REGISTRY[type]
+  if (!entry) return null
+  return (
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${DISASTER_TYPE_CLASS[type]}`}>
+      {entry.label}
+    </span>
+  )
 }
 
 function formatTime(iso: string): string {
@@ -82,9 +100,12 @@ export function RecentPlanList({
                 </span>
 
                 <div className="min-w-0 flex-1">
-                  {showInstitution && (
-                    <p className="truncate text-sm font-medium">{plan.institution_name}</p>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {showInstitution && (
+                      <p className="truncate text-sm font-medium">{plan.institution_name}</p>
+                    )}
+                    <DisasterTypeBadge type={plan.disaster_type} />
+                  </div>
                   <p className="truncate text-xs text-muted-foreground">{plan.disaster_summary}</p>
                   <div className="mt-1 flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">

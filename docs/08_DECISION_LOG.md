@@ -71,4 +71,28 @@
 - **이유**: AGENTS.md 경고: "This is NOT the Next.js you know. APIs, conventions, and file structure may all differ."
 - **영향**: CLAUDE.md 작업 규칙, 모든 구현 단계.
 
+### D-013 — 2026-06-15 — 재난유형 3종 + 역할 5종 확장 (D-001 보완)
+- **결정**: 폭염 단일에서 **폭염·집중호우·감염병** 3종으로, 역할은 원장·담임교사·통학버스담당자 + **조리사/급식담당자·보건담당자** 5종으로 확장. 공통 구조와 재난유형별 구조를 분리(레지스트리 패턴).
+- **이유**: 공모전 제품 경쟁력 강화. 단 폭염 데모 안정화(D-001) 이후 공통화 기반으로 확장하여 회귀 리스크 최소화.
+- **대안**: 폭염 구조 복사 후 유형별 중복 개발 → 유지보수성·일관성 저하로 기각.
+- **영향**: `docs/11_DISASTER_TYPE_EXPANSION_PLAN.md`(신규 SSOT), `lib/disaster/*`, `docs/00,02,04,05,06`. 구현 순서 P8(공통화)→P9(집중호우)→P10(감염병)→P11(역할).
+
+### D-014 — 2026-06-15 — 재난유형 프로필 저장 = 선택지 C (공통컬럼 + JSONB)
+- **결정**: `institution_risk_profiles` 범용 테이블 — 공통 위험대응 컬럼 + `disaster_specific` JSONB + disaster_type + is_current. 기존 heatwave_profiles는 데이터 이관 후 레거시 보존.
+- **이유**: 재난유형 확장 시 마이그레이션 거의 불필요(JSONB) + 공통 조회 로직 재사용. MVP 개발속도와 확장성 균형.
+- **대안**: A(유형별 테이블 분리 — 코드 3배), B(전부 JSONB — 타입 안정성↓). 균형안 C 채택.
+- **영향**: `supabase/migrations/0002_disaster_expansion.sql`, `lib/disaster/profileMapping.ts`, `lib/types/db.ts`.
+
+### D-015 — 2026-06-15 — AI 출력 = role_based_actions 배열 + 레거시 호환
+- **결정**: AI 출력의 역할별 체크리스트를 고정 필드(director/teacher/shuttle_checklist)에서 `role_based_actions[]` 동적 배열로 전환. 기존 필드는 `legacyAdapter`(ensureLegacyChecklists)로 파생 유지.
+- **이유**: 역할 N개 확장 시 스키마 변경 불필요. 기존 폭염 소비처(PlanResult·checklist_items·after-action) 무중단.
+- **대안**: 고정 필드 5개로 확장 → 역할 추가 때마다 스키마 수정 필요. 기각.
+- **영향**: `lib/ai/aiPlanSchema.ts`, `lib/ai/legacyAdapter.ts`, `lib/ai/buildSystemPrompt.ts`, `components/plan/PlanResult.tsx`.
+
+### D-016 — 2026-06-15 — 마이그레이션 적용 = Supabase Management API (access token)
+- **결정**: 0002 마이그레이션을 Supabase Management API(`POST /v1/projects/{ref}/database/query`) + personal access token으로 적용.
+- **이유**: service_role 키는 PostgREST 인증용이라 DDL 실행 불가. 프로젝트에 pg 드라이버·supabase CLI·psql 미설치. Management API가 추가 설치 없이 가장 빠른 경로.
+- **대안**: DB connection string(pg) — 비밀번호 노출↑. 대시보드 수동 실행 — 자동화 불가. CLI — 설치·링크 필요.
+- **영향**: 운영 절차. `SUPABASE_ACCESS_TOKEN` env(.env.local, 서버 전용). 향후 마이그레이션 동일 경로 권장.
+
 <!-- 새 결정은 D-0xx로 아래에 append -->

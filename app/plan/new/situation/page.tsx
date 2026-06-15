@@ -8,7 +8,7 @@ export const metadata = {
 export default function SituationPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <WizardProgress currentStep={2} />
+      <WizardProgress currentStep={3} />
 
       <div className="mb-6">
         <h1 className="text-xl font-bold">현재 상황 선택</h1>

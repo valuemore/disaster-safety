@@ -30,6 +30,20 @@ const ROLES: { id: Role; label: string; emoji: string; description: string; href
     href: '/plan/new?role=shuttle',
   },
   {
+    id: 'cook_or_food_service',
+    label: '조리사/급식담당자',
+    emoji: '🍳',
+    description: '급식 위생·조리실 안전',
+    href: '/plan/new?role=cook_or_food_service',
+  },
+  {
+    id: 'health_manager',
+    label: '보건담당자',
+    emoji: '🩺',
+    description: '증상 관찰·분리·보호자 연락 안내',
+    href: '/plan/new?role=health_manager',
+  },
+  {
     id: 'admin',
     label: '지자체 관리자',
     emoji: '🏛️',

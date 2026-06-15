@@ -17,6 +17,8 @@ const ROLE_LABELS: Record<string, string> = {
   director: '원장',
   teacher: '담임교사',
   shuttle: '통학버스',
+  cook_or_food_service: '조리사/급식담당자',
+  health_manager: '보건담당자',
   admin: '지자체 관리자',
 }
 

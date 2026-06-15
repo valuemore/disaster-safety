@@ -3,9 +3,11 @@ import { USE_SAMPLE_FALLBACK } from '@/lib/env'
 import {
   SAMPLE_ACTION_REQUEST,
   SAMPLE_INSTITUTIONS,
-  SAMPLE_HEATWAVE_PROFILES,
 } from '@/lib/sample'
+import { ensureLegacyChecklists } from '@/lib/ai/legacyAdapter'
+import { ROLEKEY_TO_DB_ROLE } from '@/lib/disaster/types'
 import type { ActionRequest, ChecklistRole } from '@/lib/types/db'
+import type { RoleKey } from '@/lib/disaster/types'
 
 interface PageProps {
   params: Promise<{ requestId: string }>
@@ -19,15 +21,39 @@ interface ChecklistItemData {
 }
 
 // result_json의 체크리스트 배열 → ChecklistItemData 변환 (DB 없는 경우 또는 fallback)
+// T8-3: ensureLegacyChecklists 로 role_based_actions → 레거시 필드 파생 보장
+// P11: role_based_actions 있으면 5역할 모두 처리, 없으면 레거시 3역할 fallback
 function buildChecklistFromResult(
   request: ActionRequest
 ): ChecklistItemData[] {
-  const result = request.result_json
+  const result = ensureLegacyChecklists(request.result_json)
   const items: ChecklistItemData[] = []
+
+  // role_based_actions 가 있으면 5역할 모두 처리
+  if (result.role_based_actions && result.role_based_actions.length > 0) {
+    for (const roleAction of result.role_based_actions) {
+      const roleKey = roleAction.role as RoleKey
+      const dbRole = ROLEKEY_TO_DB_ROLE[roleKey]
+      if (!dbRole) continue
+      roleAction.actions
+        .filter((a) => a && a !== '해당 없음')
+        .forEach((content, i) => {
+          items.push({
+            id: `${request.id}-${dbRole}-${i}`,
+            content,
+            is_done: false,
+            role: dbRole,
+          })
+        })
+    }
+    return items
+  }
+
+  // 레거시 fallback: director/teacher/shuttle 3역할
   const roles: [ChecklistRole, string[]][] = [
-    ['director', result.director_checklist],
-    ['teacher', result.teacher_checklist],
-    ['shuttle', result.shuttle_checklist],
+    ['director', result.director_checklist ?? []],
+    ['teacher', result.teacher_checklist ?? []],
+    ['shuttle', result.shuttle_checklist ?? []],
   ]
   for (const [role, list] of roles) {
     list.forEach((content, i) => {

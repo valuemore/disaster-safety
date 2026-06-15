@@ -104,9 +104,18 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   ])
 }
 
+/**
+ * 기상 컨텍스트 조회.
+ *
+ * @param lat - 위도 (없으면 샘플 fallback)
+ * @param lng - 경도 (없으면 샘플 fallback)
+ * @param _disasterType - 재난유형 (optional). 현재 구조 유지 — 향후 유형별 파라미터 확장 가능.
+ *                        집중호우 맥락에서는 강수 관련 카테고리(RN1/PTY) 추가 활용 예정(미래 확장).
+ */
 export async function fetchWeatherContext(
   lat: number | null | undefined,
-  lng: number | null | undefined
+  lng: number | null | undefined,
+  _disasterType?: string | null
 ): Promise<WeatherContext> {
   if (USE_SAMPLE_FALLBACK || !KMA_WEATHER_API_KEY || lat == null || lng == null) {
     return { ...SAMPLE_WEATHER, observed_at: new Date().toISOString() }

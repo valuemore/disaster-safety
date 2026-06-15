@@ -8,11 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 
 interface AiDraft {
-  outdoor_adjusted: string | null
-  cooling_checked: string | null
-  child_health_issue: string | null
-  parents_notified: string | null
-  shuttle_checked: string | null
+  // T8-3: 폭염 레거시 필드 — optional 유지 (after_action_draft 범용화)
+  outdoor_adjusted?: string | null
+  cooling_checked?: string | null
+  child_health_issue?: string | null
+  parents_notified?: string | null
+  shuttle_checked?: string | null
   notes: string
   improvement: string
 }
@@ -35,9 +36,9 @@ interface FormState {
   improvement: string
 }
 
-// AI 초안의 문자열로 boolean 초기값 추론 (non-null → 조치됨으로 간주)
-function inferBool(draftValue: string | null): boolean | null {
-  if (draftValue === null) return null
+// AI 초안의 문자열로 boolean 초기값 추론 (non-null/undefined → 조치됨으로 간주)
+function inferBool(draftValue: string | null | undefined): boolean | null {
+  if (draftValue == null) return null
   return true
 }
 
@@ -47,7 +48,7 @@ function nowIso(): string {
 
 interface ToggleFieldProps {
   label: string
-  hint: string | null
+  hint: string | null | undefined
   value: boolean | null
   onChange: (v: boolean | null) => void
 }

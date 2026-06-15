@@ -47,7 +47,7 @@ function PlanNewInner() {
       institution_name: inst?.name ?? null,
       has_shuttle: inst?.has_shuttle ?? false,
     })
-    router.push('/plan/new/message')
+    router.push('/plan/new/type')
   }
 
   return (

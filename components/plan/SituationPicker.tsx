@@ -6,29 +6,22 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useWizardState } from '@/lib/hooks/useWizardState'
 import { useRole } from '@/components/providers/RoleProvider'
+import { DISASTER_REGISTRY } from '@/lib/disaster/registry'
 import type { SituationCode } from '@/lib/types/db'
 
 const MAX_SELECT = 3
-
-const SITUATIONS: { code: SituationCode; label: string; emoji: string }[] = [
-  { code: 'before_outdoor', label: '실외활동 시작 전', emoji: '🌤️' },
-  { code: 'during_outdoor', label: '실외놀이 중', emoji: '🏃' },
-  { code: 'field_trip_planned', label: '현장학습·외출 예정', emoji: '🚌' },
-  { code: 'meal_time', label: '급식 시간', emoji: '🍱' },
-  { code: 'nap_time', label: '낮잠 시간', emoji: '😴' },
-  { code: 'pickup_prep', label: '하원 준비 중', emoji: '🎒' },
-  { code: 'before_shuttle', label: '통학버스 탑승 전', emoji: '🚌' },
-  { code: 'cooling_issue', label: '냉방기 이상', emoji: '❄️' },
-  { code: 'heat_symptom_suspected', label: '온열증상 의심 유아', emoji: '🌡️' },
-  { code: 'no_special', label: '특별한 상황 없음', emoji: '✅' },
-  { code: 'etc', label: '기타(직접 입력)', emoji: '✏️' },
-]
 
 export function SituationPicker() {
   const router = useRouter()
   const { get, update } = useWizardState()
   const { role } = useRole()
   const draft = get()
+
+  // 재난유형별 상황 목록을 레지스트리에서 동적 로드
+  const disasterType = draft.disaster_type ?? 'heatwave'
+  const registryEntry = DISASTER_REGISTRY[disasterType]
+  // registry의 code: string 을 SituationCode 로 캐스팅 (폭염 코드는 동일)
+  const situations = registryEntry?.situations ?? []
 
   const [selected, setSelected] = useState<SituationCode[]>(draft.selected_situations)
   const [etcText, setEtcText] = useState(draft.situation_etc)
@@ -86,6 +79,22 @@ export function SituationPicker() {
     }
   }
 
+  // 레지스트리에 상황이 없는 경우(준비 중 재난유형) 안내 표시
+  if (situations.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-6 text-center">
+          <p className="text-sm font-medium text-amber-800">
+            {registryEntry?.label ?? disasterType} 유형의 상황 선택은 준비 중입니다.
+          </p>
+          <p className="mt-1 text-xs text-amber-700">
+            현재는 폭염(heatwave) 유형만 지원됩니다.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {/* 선택 카운터 */}
@@ -100,8 +109,10 @@ export function SituationPicker() {
 
       {/* 상황 버튼 그리드 */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {SITUATIONS.map(({ code, label, emoji }) => {
-          const isSelected = selected.includes(code)
+        {situations.map(({ code, label, emoji }) => {
+          // registry code: string → SituationCode 캐스팅 (폭염은 완전 일치)
+          const situationCode = code as SituationCode
+          const isSelected = selected.includes(situationCode)
           const isDisabled =
             !isSelected &&
             code !== 'no_special' &&
@@ -110,7 +121,7 @@ export function SituationPicker() {
           return (
             <button
               key={code}
-              onClick={() => toggle(code)}
+              onClick={() => toggle(situationCode)}
               disabled={isDisabled}
               className={`flex min-h-[56px] items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-all ${
                 isSelected
@@ -139,11 +150,20 @@ export function SituationPicker() {
           <textarea
             id="etc-text"
             rows={3}
-            placeholder="현재 상황을 직접 입력하세요."
+            placeholder={
+              disasterType === 'infection'
+                ? '증상 유형·인원수·상황만 입력하세요. (유아 이름·진단명·질병명 기재 금지)'
+                : '현재 상황을 직접 입력하세요. (개인정보 기재 금지)'
+            }
             value={etcText}
             onChange={(e) => setEtcText(e.target.value)}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring"
           />
+          {disasterType === 'infection' && (
+            <p className="mt-1 text-xs text-amber-700">
+              유아 이름·진단명·질병명·보호자 연락처는 입력하지 않습니다. &quot;발열 유아 1명&quot;처럼 집계·증상 정보만 기재하세요.
+            </p>
+          )}
         </div>
       )}
 
@@ -159,7 +179,7 @@ export function SituationPicker() {
             대응계획 생성 중...
           </span>
         ) : (
-          '🌡️ 대응계획 생성하기'
+          '대응계획 생성하기'
         )}
       </Button>
 

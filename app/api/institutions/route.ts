@@ -4,6 +4,23 @@ import { createAdminSupabaseClient } from '@/lib/supabase/server'
 import { USE_SAMPLE_FALLBACK } from '@/lib/env'
 import { SAMPLE_INSTITUTIONS } from '@/lib/sample'
 
+// ── StaffProfile zod 스키마 ──────────────────────────────────────────────────
+// PII 없음: 인력 유무·수·유형만. 이름·연락처·진단명 없음.
+const StaffProfileSchema = z.object({
+  meal_count_per_serving:       z.number().int().min(0).max(9999).optional(),
+  has_food_service_staff:       z.boolean().optional(),
+  food_service_staff_count:     z.number().int().min(0).max(999).optional(),
+  has_cook_license_staff:       z.boolean().optional(),
+  has_collective_food_service:  z.boolean().optional(),
+  has_health_staff:             z.boolean().optional(),
+  health_staff_type:            z.enum(['nurse', 'nursing_assistant', 'health_teacher', 'designated', 'none']).nullable().optional(),
+  health_staff_count:           z.number().int().min(0).max(999).optional(),
+  has_nurse_or_nursing_assistant: z.boolean().optional(),
+  has_health_teacher:           z.boolean().optional(),
+  has_designated_health_manager: z.boolean().optional(),
+  kindergarten_class_count:     z.number().int().min(0).max(9999).optional(),
+}).optional()
+
 const InstitutionSchema = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(['daycare', 'kindergarten']),
@@ -21,6 +38,8 @@ const InstitutionSchema = z.object({
   has_outdoor_playground: z.boolean().default(false),
   cooling_space_count: z.number().int().min(0).max(999).default(0),
   water_available: z.boolean().default(false),
+  /** 급식·보건 인력 프로필 (0002 추가 컬럼). 미입력 시 기본값 '{}' 유지. */
+  staff_profile: StaffProfileSchema,
 })
 
 export async function GET() {

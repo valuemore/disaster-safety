@@ -1,6 +1,7 @@
 import type { Institution } from '@/lib/types/db'
 
 // 샘플 기관 3곳 — supabase/seed.sql과 동일 데이터 (id 고정)
+// staff_profile 예시 포함 (roleRecommendation 추천 문구 시연용)
 export const SAMPLE_INSTITUTIONS: Institution[] = [
   {
     id: '11111111-0000-0000-0000-000000000001',
@@ -20,6 +21,21 @@ export const SAMPLE_INSTITUTIONS: Institution[] = [
     has_outdoor_playground: true,
     cooling_space_count: 5,
     water_available: true,
+    // 데모: 어린이집 80명 → 조리원 기본 활성화 기준 해당 (40명+)
+    // PII 없음: 인력 유무·수·유형만
+    staff_profile: {
+      meal_count_per_serving: 80,
+      has_food_service_staff: true,
+      food_service_staff_count: 2,
+      has_cook_license_staff: true,
+      has_collective_food_service: true,
+      has_health_staff: false,
+      health_staff_type: 'none',
+      health_staff_count: 0,
+      has_nurse_or_nursing_assistant: false,
+      has_health_teacher: false,
+      has_designated_health_manager: false,
+    },
     created_at: '2026-06-15T09:00:00+09:00',
     updated_at: '2026-06-15T09:00:00+09:00',
   },
@@ -41,6 +57,23 @@ export const SAMPLE_INSTITUTIONS: Institution[] = [
     has_outdoor_playground: true,
     cooling_space_count: 8,
     water_available: true,
+    // 데모: 사립 유치원 120명 → 영양사/영양교사 기준 확인 필요 (100명+)
+    // 학급 수 8개 → 36학급 미만이므로 보건교사 다인 기준 해당 없음
+    // PII 없음: 인력 유무·수·유형만
+    staff_profile: {
+      meal_count_per_serving: 120,
+      has_food_service_staff: true,
+      food_service_staff_count: 3,
+      has_cook_license_staff: true,
+      has_collective_food_service: true,
+      has_health_staff: true,
+      health_staff_type: 'health_teacher',
+      health_staff_count: 1,
+      has_nurse_or_nursing_assistant: false,
+      has_health_teacher: true,
+      has_designated_health_manager: false,
+      kindergarten_class_count: 8,
+    },
     created_at: '2026-06-15T09:00:00+09:00',
     updated_at: '2026-06-15T09:00:00+09:00',
   },
@@ -62,6 +95,21 @@ export const SAMPLE_INSTITUTIONS: Institution[] = [
     has_outdoor_playground: false,
     cooling_space_count: 2,
     water_available: true,
+    // 데모: 어린이집 45명 → 조리원 기본 활성화 기준 해당 (40명+)
+    // PII 없음: 인력 유무·수·유형만
+    staff_profile: {
+      meal_count_per_serving: 45,
+      has_food_service_staff: true,
+      food_service_staff_count: 1,
+      has_cook_license_staff: false,
+      has_collective_food_service: false,
+      has_health_staff: false,
+      health_staff_type: 'none',
+      health_staff_count: 0,
+      has_nurse_or_nursing_assistant: false,
+      has_health_teacher: false,
+      has_designated_health_manager: false,
+    },
     created_at: '2026-06-15T09:00:00+09:00',
     updated_at: '2026-06-15T09:00:00+09:00',
   },

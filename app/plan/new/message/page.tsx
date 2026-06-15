@@ -8,7 +8,7 @@ export const metadata = {
 export default function MessagePage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <WizardProgress currentStep={1} />
+      <WizardProgress currentStep={2} />
 
       <div className="mb-6">
         <h1 className="text-xl font-bold">재난문자 선택</h1>

@@ -20,6 +20,8 @@ const ROLE_LABELS: Record<ChecklistRole, string> = {
   director: '원장',
   teacher: '담임교사',
   shuttle: '통학버스 담당자',
+  cook_or_food_service: '조리사/급식담당자',
+  health_manager: '보건담당자',
 }
 
 export function ChecklistCard({ requestId, role, items: initialItems }: ChecklistCardProps) {
@@ -62,32 +64,36 @@ export function ChecklistCard({ requestId, role, items: initialItems }: Checklis
         </div>
       </CardHeader>
       <CardContent className="space-y-2 pt-1">
-        {items.map((item, i) => (
-          <button
-            key={item.id}
-            onClick={() => toggle(item.id)}
-            className={`flex w-full min-h-[44px] items-start gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted ${
-              item.is_done ? 'opacity-60' : ''
-            }`}
-            aria-pressed={item.is_done}
-          >
-            <span
-              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs transition-colors ${
-                item.is_done
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border'
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">이 역할에 해당하는 조치 항목이 없습니다.</p>
+        ) : (
+          items.map((item, i) => (
+            <button
+              key={item.id}
+              onClick={() => toggle(item.id)}
+              className={`flex w-full min-h-[44px] items-start gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted ${
+                item.is_done ? 'opacity-60' : ''
               }`}
-              aria-hidden="true"
+              aria-pressed={item.is_done}
             >
-              {item.is_done ? '✓' : i + 1}
-            </span>
-            <span
-              className={`leading-snug ${item.is_done ? 'line-through text-muted-foreground' : ''}`}
-            >
-              {item.content}
-            </span>
-          </button>
-        ))}
+              <span
+                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs transition-colors ${
+                  item.is_done
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border'
+                }`}
+                aria-hidden="true"
+              >
+                {item.is_done ? '✓' : i + 1}
+              </span>
+              <span
+                className={`leading-snug ${item.is_done ? 'line-through text-muted-foreground' : ''}`}
+              >
+                {item.content}
+              </span>
+            </button>
+          ))
+        )}
       </CardContent>
     </Card>
   )

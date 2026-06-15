@@ -23,7 +23,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   // 샘플 모드 또는 fake ID는 로컬 상태로만 관리 — 200 반환
-  if (USE_SAMPLE_FALLBACK || itemId.includes('-director-') || itemId.includes('-teacher-') || itemId.includes('-shuttle-')) {
+  // fake ID 패턴: buildChecklistFromResult 에서 생성한 `{requestId}-{role}-{index}` 형태
+  const FAKE_ID_ROLES = ['-director-', '-teacher-', '-shuttle-', '-cook_or_food_service-', '-health_manager-']
+  const isFakeId = FAKE_ID_ROLES.some((r) => itemId.includes(r))
+  if (USE_SAMPLE_FALLBACK || isFakeId) {
     return NextResponse.json({ success: true, source: 'local' })
   }
 

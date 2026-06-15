@@ -3,22 +3,15 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SafetyNotice } from '@/components/common/SafetyNotice'
 import { FallbackBadge } from '@/components/common/FallbackBadge'
 import { ChecklistCard } from './ChecklistCard'
 import { ParentNoticeCard } from './ParentNoticeCard'
-import type { ActionRequest, ChecklistRole } from '@/lib/types/db'
-
-type Tab = ChecklistRole | 'parent'
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'director', label: '원장' },
-  { key: 'teacher', label: '담임교사' },
-  { key: 'shuttle', label: '통학버스' },
-  { key: 'parent', label: '학부모 안내문' },
-]
+import { ensureLegacyChecklists } from '@/lib/ai/legacyAdapter'
+import { ROLEKEY_TO_DB_ROLE } from '@/lib/disaster/types'
+import type { ActionRequest, ChecklistRole, RoleBasedAction } from '@/lib/types/db'
+import type { RoleKey } from '@/lib/disaster/types'
 
 const PRIORITY_CONFIG = {
   high: { label: '대응 우선순위: 높음', className: 'bg-destructive text-destructive-foreground' },
@@ -39,13 +32,135 @@ interface PlanResultProps {
   checklistItems: ChecklistItemData[]
 }
 
+// 역할 탭 단위 (동적 생성용)
+type TabKey = RoleKey | 'parent'
+
+interface RoleTab {
+  key: TabKey
+  label: string
+  // DB ChecklistRole 매핑이 있는 역할은 ChecklistCard, 없으면 null → 읽기전용 리스트 렌더
+  // P11: 5역할 모두 dbRole 설정 → ChecklistCard 토글 지원
+  dbRole: ChecklistRole | null
+  // role_based_actions 에서 가져온 actions (레거시/샘플 읽기전용 렌더용)
+  actions: string[]
+}
+
+/**
+ * role_based_actions 배열에서 동적 역할 탭 목록을 생성한다.
+ * 1) role_based_actions 순서대로 역할 탭 생성
+ * 2) parent 탭 고정 추가 (마지막)
+ * role_based_actions 가 없는 레거시 데이터는 레거시 3탭으로 fallback.
+ */
+function buildTabs(
+  result: ReturnType<typeof ensureLegacyChecklists>
+): RoleTab[] {
+  const rba: RoleBasedAction[] = result.role_based_actions ?? []
+
+  if (rba.length === 0) {
+    // 레거시 fallback: director/teacher/shuttle 3탭 고정
+    const legacyTabs: RoleTab[] = [
+      {
+        key: 'director',
+        label: '원장',
+        dbRole: 'director',
+        actions: result.director_checklist ?? [],
+      },
+      {
+        key: 'homeroom_teacher',
+        label: '담임교사',
+        dbRole: 'teacher',
+        actions: result.teacher_checklist ?? [],
+      },
+      {
+        key: 'bus_manager',
+        label: '통학버스',
+        dbRole: 'shuttle',
+        actions: result.shuttle_checklist ?? [],
+      },
+    ]
+    return [
+      ...legacyTabs,
+      { key: 'parent', label: '학부모 안내문', dbRole: null, actions: [] },
+    ]
+  }
+
+  const roleTabs: RoleTab[] = rba.map((entry) => {
+    const roleKey = entry.role as RoleKey
+    // ROLEKEY_TO_DB_ROLE: 5역할 모두 매핑 (director/homeroom_teacher/bus_manager/cook_or_food_service/health_manager)
+    const dbRole = ROLEKEY_TO_DB_ROLE[roleKey] ?? null
+    return {
+      key: roleKey,
+      label: entry.role_label,
+      dbRole,
+      actions: entry.actions,
+    }
+  })
+
+  return [
+    ...roleTabs,
+    { key: 'parent', label: '학부모 안내문', dbRole: null, actions: [] },
+  ]
+}
+
+/**
+ * DB ChecklistRole 매핑이 없는 역할(조리사, 보건담당자 등)의
+ * actions 를 읽기전용 리스트로 표시한다.
+ */
+function ReadOnlyActionList({
+  label,
+  actions,
+}: {
+  label: string
+  actions: string[]
+}) {
+  if (actions.length === 0 || (actions.length === 1 && actions[0] === '해당 없음')) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">{label} 체크리스트</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">이 역할에 해당하는 조치 항목이 없습니다.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">{label} 체크리스트</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 pt-1">
+        {actions.map((action, i) => (
+          <div
+            key={i}
+            className="flex min-h-[44px] items-start gap-3 rounded-md px-2 py-2 text-sm"
+          >
+            <span
+              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border text-xs"
+              aria-hidden="true"
+            >
+              {i + 1}
+            </span>
+            <span className="leading-snug">{action}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function PlanResult({ request, institutionName, checklistItems }: PlanResultProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('director')
-  const result = request.result_json
+  // ensureLegacyChecklists 로 role_based_actions → 레거시 필드 보완
+  const result = ensureLegacyChecklists(request.result_json)
+  const tabs = buildTabs(result)
+
+  const [activeTab, setActiveTab] = useState<TabKey>(tabs[0]?.key ?? 'parent')
   const pConfig = PRIORITY_CONFIG[result.priority]
 
-  const itemsByRole = (role: ChecklistRole) =>
-    checklistItems.filter((it) => it.role === role)
+  const itemsByDbRole = (dbRole: ChecklistRole) =>
+    checklistItems.filter((it) => it.role === dbRole)
 
   return (
     <div className="space-y-4">
@@ -103,10 +218,10 @@ export function PlanResult({ request, institutionName, checklistItems }: PlanRes
         </Card>
       )}
 
-      {/* 역할 탭 */}
+      {/* 역할 탭 (role_based_actions 기반 동적 생성) */}
       <div>
         <div className="mb-3 flex overflow-x-auto rounded-lg border bg-muted p-1 gap-1">
-          {TABS.map(({ key, label }) => (
+          {tabs.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -121,30 +236,36 @@ export function PlanResult({ request, institutionName, checklistItems }: PlanRes
           ))}
         </div>
 
-        {activeTab === 'director' && (
-          <ChecklistCard
-            requestId={request.id}
-            role="director"
-            items={itemsByRole('director')}
-          />
-        )}
-        {activeTab === 'teacher' && (
-          <ChecklistCard
-            requestId={request.id}
-            role="teacher"
-            items={itemsByRole('teacher')}
-          />
-        )}
-        {activeTab === 'shuttle' && (
-          <ChecklistCard
-            requestId={request.id}
-            role="shuttle"
-            items={itemsByRole('shuttle')}
-          />
-        )}
-        {activeTab === 'parent' && (
-          <ParentNoticeCard text={result.parent_notice} />
-        )}
+        {/* 탭 콘텐츠 */}
+        {tabs.map((tab) => {
+          if (tab.key !== activeTab) return null
+
+          if (tab.key === 'parent') {
+            return <ParentNoticeCard key="parent" text={result.parent_notice} />
+          }
+
+          if (tab.dbRole !== null) {
+            // DB ChecklistRole 매핑 있는 역할: ChecklistCard (체크토글 지원)
+            const dbRoleItems = itemsByDbRole(tab.dbRole)
+            return (
+              <ChecklistCard
+                key={tab.key}
+                requestId={request.id}
+                role={tab.dbRole}
+                items={dbRoleItems}
+              />
+            )
+          }
+
+          // DB 매핑 없는 역할(레거시/알 수 없는 키): 읽기전용 리스트
+          return (
+            <ReadOnlyActionList
+              key={tab.key}
+              label={tab.label}
+              actions={tab.actions}
+            />
+          )
+        })}
       </div>
 
       {/* 응급 안내 */}

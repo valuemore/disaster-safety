@@ -8,6 +8,7 @@ export type { WizardDraft } from '@/lib/types/wizard'
 const STORAGE_KEY = 'dsmvp_wizard_draft'
 
 const EMPTY_DRAFT: WizardDraft = {
+  disaster_type: 'heatwave',
   institution_id: null,
   institution_name: null,
   has_shuttle: false,
