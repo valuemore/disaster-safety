@@ -7,7 +7,7 @@ export interface WizardDraft {
   has_shuttle: boolean
   disaster_message_id: string | null
   disaster_message_text: string
-  disaster_message_source: 'sample' | 'manual'
+  disaster_message_source: 'sample' | 'manual' | 'api'
   disaster_message_issued_at: string | null
   selected_situations: SituationCode[]
   situation_etc: string

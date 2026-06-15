@@ -278,6 +278,73 @@ await check(
   () => get('/admin/institutions/11111111-0000-0000-0000-000000000001')
 )
 
+// P6: 공공 API fallback 검사
+console.log('\n[P6] 공공 API fallback 검사')
+await check(
+  'GET /api/external/geocode?query=서울특별시 종로구 — 좌표 반환',
+  async () => {
+    const r = await get('/api/external/geocode?query=%EC%84%9C%EC%9A%B8%ED%8A%B9%EB%B3%84%EC%8B%9C%20%EC%A2%85%EB%A1%9C%EA%B5%AC')
+    if (!r.ok) return r
+    const json = await r.res.json()
+    if (typeof json?.data?.lat !== 'number') {
+      return { ok: false, reason: 'lat 없음' }
+    }
+    return { ok: true }
+  }
+)
+await check(
+  'GET /api/external/weather?lat=37.56&lng=126.97 — 날씨 반환',
+  async () => {
+    const r = await get('/api/external/weather?lat=37.56&lng=126.97')
+    if (!r.ok) return r
+    const json = await r.res.json()
+    if (typeof json?.data?.temp !== 'number' && json?.data?.temp !== null) {
+      return { ok: false, reason: 'temp 필드 없음' }
+    }
+    if (!json?.data?.source) {
+      return { ok: false, reason: 'source 없음' }
+    }
+    return { ok: true }
+  }
+)
+await check(
+  'GET /api/external/weather?missing_params — 400',
+  () => get('/api/external/weather', 400)
+)
+await check(
+  'GET /api/external/disaster-sms — 재난문자 목록 반환',
+  async () => {
+    const r = await get('/api/external/disaster-sms')
+    if (!r.ok) return r
+    const json = await r.res.json()
+    if (!Array.isArray(json?.data)) {
+      return { ok: false, reason: 'data 배열 없음' }
+    }
+    if (json.data.length === 0) {
+      return { ok: false, reason: '결과 0건' }
+    }
+    if (!json.data[0].raw_text) {
+      return { ok: false, reason: 'raw_text 없음' }
+    }
+    return { ok: true }
+  }
+)
+await check(
+  'GET /api/external/weather/impact — 영향예보 반환',
+  async () => {
+    const r = await get('/api/external/weather/impact')
+    if (!r.ok) return r
+    const json = await r.res.json()
+    if (!json?.data?.level) {
+      return { ok: false, reason: 'level 없음' }
+    }
+    if (!json?.data?.source) {
+      return { ok: false, reason: 'source 없음' }
+    }
+    return { ok: true }
+  }
+)
+
 // PII 안전 점검
 console.log('\n[PII] 개인정보 안전 점검')
 await check(
