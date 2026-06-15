@@ -99,6 +99,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ data, source: 'db' }, { status: 201 })
   } catch (err) {
     console.error('[POST after-action]', err)
-    return NextResponse.json({ error: '사후기록 저장 중 오류가 발생했습니다.' }, { status: 500 })
+    // DB 저장 실패 시에도 데모 흐름 유지 (사후기록 저장은 선택적)
+    return NextResponse.json({
+      data: { id: 'fallback-aar', action_request_id: requestId, ...parsed.data },
+      source: 'sample',
+    })
   }
 }
