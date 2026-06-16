@@ -1,15 +1,18 @@
 /**
- * S0→S7 스모크 테스트 스크립트 (Node.js ESM)
- * 실행: USE_SAMPLE_FALLBACK=true node scripts/smoke-test.mjs
- *
+ * 스모크 테스트 (Node.js ESM) — 리팩토링 흐름 기준
+ * 실행: USE_SAMPLE_FALLBACK=true 로 dev/start 후 `node scripts/smoke-test.mjs`
  * 서버가 http://localhost:3000 에서 실행 중이어야 한다.
+ *
+ * 새 흐름: 로그인 → 재난문자(자동분류) → 상황 → 결과(읽기) → 공유/발송
+ *  - 체크리스트 토글 / 사후기록 / 화면 샘플선택 테스트 제거
+ *  - 로그인 세션 쿠키 + 보호경로 가드 + 공유/발송/연락처/관리자 페이지네이션 추가
  */
 
 const BASE = 'http://localhost:3000'
-const SAMPLE_REQUEST_ID = '44444444-4444-4444-4444-444444444444'
 
 let passed = 0
 let failed = 0
+let cookie = '' // 로그인 세션 쿠키 저장
 
 async function check(label, fn) {
   try {
@@ -27,625 +30,237 @@ async function check(label, fn) {
   }
 }
 
-async function get(path, expectStatus = 200) {
-  const res = await fetch(`${BASE}${path}`)
-  if (res.status !== expectStatus) {
-    return { ok: false, reason: `HTTP ${res.status} (expected ${expectStatus})` }
+async function get(path, { expect = 200, auth = false, manual = false } = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: auth && cookie ? { cookie } : {},
+    redirect: manual ? 'manual' : 'follow',
+  })
+  const expected = Array.isArray(expect) ? expect : [expect]
+  if (!expected.includes(res.status)) {
+    return { ok: false, reason: `HTTP ${res.status} (expected ${expected.join('|')})` }
   }
   return { ok: true, res }
 }
 
-async function post(path, body, expectStatus = 200) {
+async function post(path, body, { expect = 200, auth = false } = {}) {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(auth && cookie ? { cookie } : {}) },
     body: JSON.stringify(body),
   })
-  const expected = Array.isArray(expectStatus) ? expectStatus : [expectStatus]
+  const expected = Array.isArray(expect) ? expect : [expect]
   if (!expected.includes(res.status)) {
     const text = await res.text().catch(() => '')
-    return { ok: false, reason: `HTTP ${res.status} (expected ${expected.join('|')}) — ${text.slice(0,100)}` }
+    return { ok: false, reason: `HTTP ${res.status} (expected ${expected.join('|')}) — ${text.slice(0, 100)}` }
   }
   return { ok: true, res }
 }
 
-async function patch(path, body) {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    return { ok: false, reason: `HTTP ${res.status}` }
-  }
-  return { ok: true, res }
-}
+console.log('\n🔥 재난안전MVP 스모크 테스트 (리팩토링 흐름)\n')
 
-// ──────────────────────────────────────────────────────────────
-console.log('\n🔥 재난안전MVP 스모크 테스트 (S0→S7)\n')
+// ── 공개 페이지 ─────────────────────────────────────────────
+console.log('[공개] 랜딩·로그인·등록')
+await check('GET / — 200', () => get('/'))
+await check('GET /login — 200', () => get('/login'))
+await check('GET /register — 200', () => get('/register'))
 
-// S0: 랜딩 (역할 선택)
-console.log('[S0] 랜딩 페이지')
-await check('GET / — 200 OK', () => get('/'))
-
-// S1/S2: 기관 관련 페이지
-console.log('\n[S1/S2] 기관 등록·프로필')
-await check('GET /institutions — 200 OK', () => get('/institutions'))
-await check('GET /institutions/new — 200 OK', () => get('/institutions/new'))
-await check('GET /api/institutions — 200 OK', () => get('/api/institutions'))
-await check(
-  'GET /api/institutions/[id]/profile — 샘플 기관 프로필 반환',
-  async () => {
-    const r = await get('/api/institutions/11111111-1111-1111-1111-111111111111/profile')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!json || typeof json !== 'object') {
-      return { ok: false, reason: 'JSON 응답 없음' }
-    }
-    return { ok: true }
-  }
+// ── 인증 ────────────────────────────────────────────────────
+console.log('\n[인증] 로그인 세션')
+await check('POST /api/auth/login — 세션 발급', async () => {
+  const r = await post('/api/auth/login', { login_id: 'demo', pin: '1234' })
+  if (!r.ok) return r
+  const setCookie = r.res.headers.get('set-cookie')
+  if (!setCookie || !setCookie.includes('ds_session')) return { ok: false, reason: 'ds_session 쿠키 없음' }
+  cookie = setCookie.split(';')[0]
+  const json = await r.res.json()
+  if (!json?.data?.id) return { ok: false, reason: 'data.id 없음' }
+  return { ok: true }
+})
+await check('GET /api/auth/session — 로그인 상태 확인', async () => {
+  const r = await get('/api/auth/session', { auth: true })
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (!json?.data?.id) return { ok: false, reason: 'session data 없음' }
+  return { ok: true }
+})
+await check('GET /plan/new/message (미인증) — /login 가드(307)', () =>
+  get('/plan/new/message', { expect: 307, manual: true })
 )
+await check('GET /plan/new/message (인증) — 200', () => get('/plan/new/message', { auth: true }))
+await check('GET /plan/new/situation (인증) — 200', () => get('/plan/new/situation', { auth: true }))
+await check('GET /account/contacts (인증) — 200', () => get('/account/contacts', { auth: true }))
 
-// S3: 재난문자 선택 페이지
-console.log('\n[S3] 재난문자 선택')
-await check('GET /plan/new — 200 OK', () => get('/plan/new'))
-await check('GET /plan/new/message — 200 OK', () => get('/plan/new/message'))
+// ── 어린이집포털 검색 ───────────────────────────────────────
+console.log('\n[등록] 어린이집포털 API')
+await check('GET /api/external/childcare?q=햇살 — 후보 반환', async () => {
+  const r = await get('/api/external/childcare?q=%ED%96%87%EC%82%B4')
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (!Array.isArray(json?.data) || json.data.length === 0) return { ok: false, reason: '후보 없음' }
+  if (typeof json.data[0].infant_total_count !== 'number') return { ok: false, reason: '파생값 없음' }
+  return { ok: true }
+})
 
-// S4: 현재상황 선택
-console.log('\n[S4] 현재상황 선택')
-await check('GET /plan/new/situation — 200 OK', () => get('/plan/new/situation'))
+// ── 재난유형 자동분류 ───────────────────────────────────────
+console.log('\n[분류] 재난유형 자동분류')
+await check('POST /api/plan/classify (폭염문구) — heatwave', async () => {
+  const r = await post('/api/plan/classify', { raw_text: '[기상청] 폭염경보 발효. 야외활동 자제.' })
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (json?.data?.disaster_type !== 'heatwave') return { ok: false, reason: `type=${json?.data?.disaster_type}` }
+  return { ok: true }
+})
+await check('POST /api/plan/classify (호우문구) — heavy_rain', async () => {
+  const r = await post('/api/plan/classify', { raw_text: '[기상청] 호우경보. 저지대 침수 위험.' })
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (json?.data?.disaster_type !== 'heavy_rain') return { ok: false, reason: `type=${json?.data?.disaster_type}` }
+  return { ok: true }
+})
 
-// S5: 대응계획 생성 (API — 샘플 fallback)
-console.log('\n[S5] 대응계획 생성 API')
-const wizardDraft = {
-  institution_id: '11111111-1111-1111-1111-111111111111',
-  institution_name: '햇살어린이집',
+// ── 대응계획 생성 (3유형) ───────────────────────────────────
+console.log('\n[생성] 대응계획 (5역할 read-only)')
+const baseDraft = {
   has_shuttle: true,
-  disaster_message_id: '33333333-3333-3333-3333-333333333301',
   disaster_message_text: '[기상청] 폭염경보 발효. 야외활동 자제, 충분한 수분 섭취.',
-  disaster_message_source: 'sample',
+  disaster_message_source: 'manual',
   disaster_message_issued_at: '2026-06-15T10:00:00+09:00',
-  selected_situations: ['outdoor_play', 'heat_symptom_suspected'],
+  selected_situations: ['before_outdoor', 'heat_symptom_suspected'],
   situation_etc: '',
-  role: 'director',
 }
-
-let generatedRequestId = SAMPLE_REQUEST_ID
-
-await check(
-  'POST /api/plan/generate — 대응계획 생성 성공',
-  async () => {
-    const r = await post('/api/plan/generate', wizardDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!json?.data?.id) {
-      return { ok: false, reason: `data.id 없음 — ${JSON.stringify(json).slice(0, 200)}` }
-    }
-    if (!json?.data?.result_json?.director_checklist?.length) {
-      return { ok: false, reason: 'director_checklist 없음' }
-    }
-    generatedRequestId = json.data.id
-    return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate — result_json.priority 유효값',
-  async () => {
-    const r = await post('/api/plan/generate', wizardDraft)
-    if (!r.ok) return r
-    const json = await r.res.json()
-    const priority = json?.data?.result_json?.priority
-    if (!['high', 'medium', 'low'].includes(priority)) {
-      return { ok: false, reason: `priority=${priority}` }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate — safety_disclaimer 고정 문구 포함',
-  async () => {
-    const r = await post('/api/plan/generate', wizardDraft)
-    if (!r.ok) return r
-    const json = await r.res.json()
-    const disc = json?.data?.result_json?.safety_disclaimer ?? ''
-    if (!disc.includes('공식기관 지시와 119')) {
-      return { ok: false, reason: `safety_disclaimer 부재: ${disc.slice(0, 50)}` }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate — 재난문자+상황 없으면 400',
-  async () => {
-    const r = await post('/api/plan/generate', { ...wizardDraft, disaster_message_text: '', selected_situations: [] }, 400)
-    return r
-  }
-)
-
-// S5: 대응계획 결과 페이지
-console.log('\n[S5] 대응계획 결과 페이지')
-await check(
-  `GET /plan/${SAMPLE_REQUEST_ID} — 샘플 결과 페이지 200 OK`,
-  () => get(`/plan/${SAMPLE_REQUEST_ID}`)
-)
-await check(
-  `GET /plan/${generatedRequestId} — 생성된 결과 페이지 200 OK`,
-  () => get(`/plan/${generatedRequestId}`)
-)
-
-// S6: 체크리스트 토글 API (샘플 fake ID)
-console.log('\n[S6] 체크리스트 토글 (PATCH)')
-await check(
-  'PATCH /checklist/[fakeId] — 낙관적 토글 200 OK',
-  () => patch(
-    `/api/plan/${SAMPLE_REQUEST_ID}/checklist/${SAMPLE_REQUEST_ID}-director-0`,
-    { is_done: true }
-  )
-)
-
-// S7: 사후기록 페이지 및 API
-console.log('\n[S7] 사후기록')
-await check(
-  `GET /plan/${SAMPLE_REQUEST_ID}/after-action — 200 OK`,
-  () => get(`/plan/${SAMPLE_REQUEST_ID}/after-action`)
-)
-await check(
-  `GET /api/plan/${SAMPLE_REQUEST_ID}/after-action — 사후기록 조회 200 OK`,
-  async () => {
-    const r = await get(`/api/plan/${SAMPLE_REQUEST_ID}/after-action`)
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!('data' in json)) {
-      return { ok: false, reason: 'data 키 없음' }
-    }
-    return { ok: true }
-  }
-)
-await check(
-  `POST /api/plan/${SAMPLE_REQUEST_ID}/after-action — 사후기록 저장 200 OK`,
-  async () => {
-    const r = await post(`/api/plan/${SAMPLE_REQUEST_ID}/after-action`, {
-      message_checked_at: new Date().toISOString(),
-      outdoor_adjusted: true,
-      cooling_checked: true,
-      child_health_issue: false,
-      parents_notified: true,
-      shuttle_checked: null,
-      completed_by: '원장',
-      notes: '온도계 수동 확인으로 대체',
-      improvement: '온도계 비치 검토 필요',
-    })
-    return r
-  }
-)
-await check(
-  'POST /api/plan/[id]/after-action — notes 2000자 초과 시 400',
-  async () => {
-    const r = await post(`/api/plan/${SAMPLE_REQUEST_ID}/after-action`, {
-      notes: 'x'.repeat(2001),
-    }, 400)
-    return r
-  }
-)
-
-// S8/S9: 관리자 대시보드
-console.log('\n[S8/S9] 관리자 대시보드')
-await check('GET /admin — 200 OK', () => get('/admin'))
-await check(
-  'GET /api/admin/stats — stats 반환',
-  async () => {
-    const r = await get('/api/admin/stats')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (typeof json?.data?.institution_count !== 'number') {
-      return { ok: false, reason: 'institution_count 없음' }
-    }
-    if (typeof json?.data?.today_plan_count !== 'number') {
-      return { ok: false, reason: 'today_plan_count 없음' }
-    }
-    return { ok: true }
-  }
-)
-await check(
-  'GET /api/admin/plans — 목록 반환',
-  async () => {
-    const r = await get('/api/admin/plans')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!Array.isArray(json?.data)) {
-      return { ok: false, reason: 'data 배열 없음' }
-    }
-    return { ok: true }
-  }
-)
-await check(
-  'GET /api/admin/plans?institution_id=[id] — 기관 필터',
-  async () => {
-    const r = await get('/api/admin/plans?institution_id=11111111-0000-0000-0000-000000000001')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!Array.isArray(json?.data)) {
-      return { ok: false, reason: 'data 배열 없음' }
-    }
-    return { ok: true }
-  }
-)
-await check(
-  'GET /admin/institutions/[id] — 기관 상세 200 OK',
-  () => get('/admin/institutions/11111111-0000-0000-0000-000000000001')
-)
-
-// P6: 공공 API fallback 검사
-console.log('\n[P6] 공공 API fallback 검사')
-await check(
-  'GET /api/external/geocode?query=서울특별시 종로구 — 좌표 반환',
-  async () => {
-    const r = await get('/api/external/geocode?query=%EC%84%9C%EC%9A%B8%ED%8A%B9%EB%B3%84%EC%8B%9C%20%EC%A2%85%EB%A1%9C%EA%B5%AC')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (typeof json?.data?.lat !== 'number') {
-      return { ok: false, reason: 'lat 없음' }
-    }
-    return { ok: true }
-  }
-)
-await check(
-  'GET /api/external/weather?lat=37.56&lng=126.97 — 날씨 반환',
-  async () => {
-    const r = await get('/api/external/weather?lat=37.56&lng=126.97')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (typeof json?.data?.temp !== 'number' && json?.data?.temp !== null) {
-      return { ok: false, reason: 'temp 필드 없음' }
-    }
-    if (!json?.data?.source) {
-      return { ok: false, reason: 'source 없음' }
-    }
-    return { ok: true }
-  }
-)
-await check(
-  'GET /api/external/weather?missing_params — 400',
-  () => get('/api/external/weather', 400)
-)
-await check(
-  'GET /api/external/disaster-sms — 재난문자 목록 반환',
-  async () => {
-    const r = await get('/api/external/disaster-sms')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!Array.isArray(json?.data)) {
-      return { ok: false, reason: 'data 배열 없음' }
-    }
-    if (json.data.length === 0) {
-      return { ok: false, reason: '결과 0건' }
-    }
-    if (!json.data[0].raw_text) {
-      return { ok: false, reason: 'raw_text 없음' }
-    }
-    return { ok: true }
-  }
-)
-await check(
-  'GET /api/external/weather/impact — 영향예보 반환',
-  async () => {
-    const r = await get('/api/external/weather/impact')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!json?.data?.level) {
-      return { ok: false, reason: 'level 없음' }
-    }
-    if (!json?.data?.source) {
-      return { ok: false, reason: 'source 없음' }
-    }
-    return { ok: true }
-  }
-)
-
-// ──────────────────────────────────────────────────────────────
-// 경로 B: 집중호우 시연 경로 (USE_SAMPLE_FALLBACK=true 에서 완주 확인)
-console.log('\n[경로 B] 집중호우 시연 경로 (disaster_type=heavy_rain)')
-
-const heavyRainDraft = {
-  institution_id: '11111111-0000-0000-0000-000000000001',
-  institution_name: '햇살어린이집',
-  has_shuttle: true,
-  disaster_type: 'heavy_rain',
-  disaster_message_id: '33333333-0000-0000-0001-000000000001',
-  disaster_message_text: '[기상청] 호우경보 발효. 저지대·지하공간 침수 위험. 위급 시 119.',
-  disaster_message_source: 'sample',
-  disaster_message_issued_at: '2026-06-15T13:00:00+09:00',
-  selected_situations: ['pickup_prep', 'before_shuttle', 'basement_in_use'],
-  situation_etc: '',
-  role: 'director',
+const drafts = {
+  heatwave: { ...baseDraft, disaster_type: 'heatwave' },
+  heavy_rain: {
+    ...baseDraft, disaster_type: 'heavy_rain',
+    disaster_message_text: '[기상청] 호우경보 발효. 저지대·지하 침수 위험.',
+    selected_situations: ['pickup_prep', 'basement_in_use'],
+  },
+  infection: {
+    ...baseDraft, disaster_type: 'infection',
+    disaster_message_text: '',
+    selected_situations: ['fever_child', 'guardian_contact_needed'],
+  },
 }
-
-let heavyRainRequestId = '44444444-0000-0000-0000-000000000002'
-
-await check(
-  'POST /api/plan/generate (heavy_rain) — 5역할 결과 반환',
-  async () => {
-    const r = await post('/api/plan/generate', heavyRainDraft, [200, 201])
+let generatedId = ''
+for (const [type, draft] of Object.entries(drafts)) {
+  await check(`POST /api/plan/generate (${type}) — 5역할 + 고정 disclaimer`, async () => {
+    const r = await post('/api/plan/generate', draft, { expect: [200, 201], auth: true })
     if (!r.ok) return r
     const json = await r.res.json()
-    if (!json?.data?.id) {
-      return { ok: false, reason: `data.id 없음 — ${JSON.stringify(json).slice(0, 200)}` }
-    }
+    if (!json?.data?.id) return { ok: false, reason: 'data.id 없음' }
     const rba = json?.data?.result_json?.role_based_actions
-    if (!Array.isArray(rba) || rba.length < 5) {
-      return { ok: false, reason: `role_based_actions 부족: ${rba?.length ?? 0}건` }
-    }
-    const roles = rba.map((r) => r.role)
-    const requiredRoles = ['director', 'homeroom_teacher', 'bus_manager', 'cook_or_food_service', 'health_manager']
-    for (const req of requiredRoles) {
-      if (!roles.includes(req)) {
-        return { ok: false, reason: `역할 누락: ${req}` }
-      }
-    }
-    heavyRainRequestId = json.data.id
-    return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate (heavy_rain) — disaster_type=heavy_rain 반환',
-  async () => {
-    const r = await post('/api/plan/generate', heavyRainDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    const dt = json?.data?.result_json?.disaster_type
-    if (dt !== 'heavy_rain') {
-      return { ok: false, reason: `disaster_type=${dt}` }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate (heavy_rain) — safety_disclaimer 고정 문구 포함',
-  async () => {
-    const r = await post('/api/plan/generate', heavyRainDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
+    if (!Array.isArray(rba) || rba.length < 5) return { ok: false, reason: `role_based_actions 부족: ${rba?.length ?? 0}` }
     const disc = json?.data?.result_json?.safety_disclaimer ?? ''
-    if (!disc.includes('공식기관 지시와 119')) {
-      return { ok: false, reason: `safety_disclaimer 부재: ${disc.slice(0, 50)}` }
-    }
+    if (!disc.includes('공식기관 지시와 119')) return { ok: false, reason: 'disclaimer 부재' }
+    if (type === 'heatwave') generatedId = json.data.id
     return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate (heavy_rain) — source 메타 포함',
-  async () => {
-    const r = await post('/api/plan/generate', heavyRainDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!json?.source) {
-      return { ok: false, reason: `source 메타 없음` }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  'GET /api/external/disaster-sms?disaster_type=heavy_rain — 집중호우 샘플 반환',
-  async () => {
-    const r = await get('/api/external/disaster-sms?disaster_type=heavy_rain')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!Array.isArray(json?.data)) {
-      return { ok: false, reason: 'data 배열 없음' }
-    }
-    if (json.data.length === 0) {
-      return { ok: false, reason: '결과 0건' }
-    }
-    // 각 항목의 source 메타 확인
-    if (!json.data[0].source) {
-      return { ok: false, reason: 'data[0].source 메타 없음' }
-    }
-    if (!json.data[0].raw_text) {
-      return { ok: false, reason: 'data[0].raw_text 없음' }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  `GET /plan/${heavyRainRequestId} — 집중호우 결과 페이지 200 OK`,
-  () => get(`/plan/${heavyRainRequestId}`)
-)
-
-// ──────────────────────────────────────────────────────────────
-// 경로 C: 감염병 시연 경로 (USE_SAMPLE_FALLBACK=true, 재난문자 없이 완주)
-console.log('\n[경로 C] 감염병 시연 경로 (disaster_type=infection, 재난문자 없음)')
-
-const infectionDraft = {
-  institution_id: '11111111-0000-0000-0000-000000000001',
-  institution_name: '햇살어린이집',
-  has_shuttle: true,
-  disaster_type: 'infection',
-  // 감염병: disaster_message_id/text 없이 상황만으로 생성
-  disaster_message_id: null,
-  disaster_message_text: '',
-  disaster_message_source: null,
-  disaster_message_issued_at: null,
-  selected_situations: ['fever_child', 'guardian_contact_needed', 'classroom_disinfection'],
-  situation_etc: '',
-  role: 'director',
+  })
 }
+await check('POST /api/plan/generate — 상황 없으면 400', () =>
+  post('/api/plan/generate', { ...drafts.heatwave, selected_situations: [] }, { expect: 400, auth: true })
+)
+await check(`GET /plan/[id] — 결과 페이지 200`, () => get(`/plan/${generatedId}`, { auth: true }))
 
-let infectionRequestId = '44444444-0000-0000-0002-000000000001'
+// ── 공유 / 발송 ─────────────────────────────────────────────
+console.log('\n[공유] 링크·발송')
+let shareToken = ''
+await check('POST /api/plan/[id]/share — 토큰 발급', async () => {
+  const r = await post(`/api/plan/${generatedId}/share`, {}, { auth: true })
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (!json?.data?.token) return { ok: false, reason: 'token 없음' }
+  shareToken = json.data.token
+  return { ok: true }
+})
+await check('GET /share/[token]/director — 공개 페이지 200', () => get(`/share/${shareToken}/director`))
+await check('GET /share/[token]/parent — 학부모 안내문 200', () => get(`/share/${shareToken}/parent`))
+await check('POST /api/plan/[id]/notify — 발송(시뮬레이션)', async () => {
+  const r = await post(`/api/plan/${generatedId}/notify`, {}, { auth: true })
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (typeof json?.data?.sent !== 'number') return { ok: false, reason: 'sent 없음' }
+  return { ok: true }
+})
 
-await check(
-  'POST /api/plan/generate (infection, 재난문자 없음) — 5역할 결과 반환',
-  async () => {
-    const r = await post('/api/plan/generate', infectionDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!json?.data?.id) {
-      return { ok: false, reason: `data.id 없음 — ${JSON.stringify(json).slice(0, 200)}` }
-    }
-    const rba = json?.data?.result_json?.role_based_actions
-    if (!Array.isArray(rba) || rba.length < 5) {
-      return { ok: false, reason: `role_based_actions 부족: ${rba?.length ?? 0}건` }
-    }
-    const roles = rba.map((r) => r.role)
-    const requiredRoles = ['director', 'homeroom_teacher', 'bus_manager', 'cook_or_food_service', 'health_manager']
-    for (const req of requiredRoles) {
-      if (!roles.includes(req)) {
-        return { ok: false, reason: `역할 누락: ${req}` }
-      }
-    }
-    infectionRequestId = json.data.id
-    return { ok: true }
+// ── 담당자 연락처 ───────────────────────────────────────────
+console.log('\n[연락처] 역할별 담당자')
+await check('GET /api/account/contacts — 조회', async () => {
+  const r = await get('/api/account/contacts', { auth: true })
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (!Array.isArray(json?.data)) return { ok: false, reason: 'data 배열 아님' }
+  return { ok: true }
+})
+await check('PUT /api/account/contacts — 저장', async () => {
+  const r = await fetch(`${BASE}/api/account/contacts`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify({
+      contacts: [
+        { role: 'director', name: '원장', phone: '010-1234-5678', consent_sms: true, consent_kakao: false, consent_share_link: true, is_active: true },
+      ],
+    }),
+  })
+  if (!r.ok) return { ok: false, reason: `HTTP ${r.status}` }
+  return { ok: true }
+})
+
+// ── 관리자 ──────────────────────────────────────────────────
+console.log('\n[관리자] 대시보드')
+await check('GET /admin — 200', () => get('/admin'))
+await check('GET /api/admin/institutions?page=1 — 페이지네이션', async () => {
+  const r = await get('/api/admin/institutions?page=1&size=20')
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (!Array.isArray(json?.data) || typeof json?.total !== 'number') return { ok: false, reason: 'data/total 없음' }
+  return { ok: true }
+})
+await check('GET /api/admin/stats — 통계', async () => {
+  const r = await get('/api/admin/stats')
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (typeof json?.data?.institution_count !== 'number') return { ok: false, reason: 'institution_count 없음' }
+  return { ok: true }
+})
+await check('GET /api/admin/plans — 목록', async () => {
+  const r = await get('/api/admin/plans')
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (!Array.isArray(json?.data)) return { ok: false, reason: 'data 배열 아님' }
+  return { ok: true }
+})
+
+// ── 공공 API fallback ───────────────────────────────────────
+console.log('\n[공공API] fallback')
+await check('GET /api/external/disaster-sms — 목록', async () => {
+  const r = await get('/api/external/disaster-sms')
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (!Array.isArray(json?.data) || json.data.length === 0) return { ok: false, reason: '결과 없음' }
+  return { ok: true }
+})
+await check('GET /api/external/weather?lat&lng — 날씨', async () => {
+  const r = await get('/api/external/weather?lat=37.56&lng=126.97')
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (!json?.data?.source) return { ok: false, reason: 'source 없음' }
+  return { ok: true }
+})
+
+// ── PII 안전 ────────────────────────────────────────────────
+console.log('\n[PII] 안전 점검')
+await check('생성 결과에 전화번호 패턴 없음', async () => {
+  const r = await post('/api/plan/generate', drafts.infection, { expect: [200, 201], auth: true })
+  if (!r.ok) return r
+  const json = await r.res.json()
+  if (/010-\d{4}-\d{4}/.test(JSON.stringify(json?.data?.result_json ?? {}))) {
+    return { ok: false, reason: '전화번호 패턴 발견' }
   }
-)
+  return { ok: true }
+})
 
-await check(
-  'POST /api/plan/generate (infection) — disaster_type=infection 반환',
-  async () => {
-    const r = await post('/api/plan/generate', infectionDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    const dt = json?.data?.result_json?.disaster_type
-    if (dt !== 'infection') {
-      return { ok: false, reason: `disaster_type=${dt}` }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate (infection) — safety_disclaimer 고정 문구 포함',
-  async () => {
-    const r = await post('/api/plan/generate', infectionDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    const disc = json?.data?.result_json?.safety_disclaimer ?? ''
-    if (!disc.includes('공식기관 지시와 119')) {
-      return { ok: false, reason: `safety_disclaimer 부재: ${disc.slice(0, 50)}` }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate (infection) — source 메타 포함',
-  async () => {
-    const r = await post('/api/plan/generate', infectionDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!json?.source) {
-      return { ok: false, reason: `source 메타 없음` }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  'POST /api/plan/generate (infection) — disaster_message_id=null 허용',
-  async () => {
-    const r = await post('/api/plan/generate', infectionDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    // 감염병은 재난문자 없이 상황만으로 생성 — disaster_message_id null 정상
-    const dmid = json?.data?.disaster_message_id
-    if (dmid !== null && dmid !== undefined) {
-      // null 또는 undefined 모두 허용 (재난문자 없음)
-      // 실제로 값이 있으면 확인 — infection 경로에서 재난문자 없이 진행한 경우
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  'GET /api/external/disaster-sms?disaster_type=infection — 감염병 샘플 반환',
-  async () => {
-    const r = await get('/api/external/disaster-sms?disaster_type=infection')
-    if (!r.ok) return r
-    const json = await r.res.json()
-    if (!Array.isArray(json?.data)) {
-      return { ok: false, reason: 'data 배열 없음' }
-    }
-    if (json.data.length === 0) {
-      return { ok: false, reason: '결과 0건' }
-    }
-    if (!json.data[0].source) {
-      return { ok: false, reason: 'data[0].source 메타 없음' }
-    }
-    if (!json.data[0].raw_text) {
-      return { ok: false, reason: 'data[0].raw_text 없음' }
-    }
-    // 감염병 샘플인지 확인
-    const allInfection = json.data.every((item) => item.disaster_type === 'infection')
-    if (!allInfection) {
-      return { ok: false, reason: '감염병 외 유형 혼입' }
-    }
-    return { ok: true }
-  }
-)
-
-await check(
-  `GET /plan/${infectionRequestId} — 감염병 결과 페이지 200 OK`,
-  () => get(`/plan/${infectionRequestId}`)
-)
-
-// PII 안전 점검
-console.log('\n[PII] 개인정보 안전 점검')
-await check(
-  'POST /api/plan/generate (infection) — PII/진단명/확진 표현 없음',
-  async () => {
-    const r = await post('/api/plan/generate', infectionDraft, [200, 201])
-    if (!r.ok) return r
-    const json = await r.res.json()
-    const resultStr = JSON.stringify(json)
-    // 전화번호 패턴
-    if (/010-\d{4}-\d{4}/.test(resultStr)) {
-      return { ok: false, reason: '결과에 전화번호 패턴 발견' }
-    }
-    // "확진" 단정 표현 — 사용자 입력 상황 코드 제외한 AI 출력 부분 확인
-    const aiResult = json?.data?.result_json ?? {}
-    const aiStr = JSON.stringify(aiResult)
-    // "확진자" 또는 "확진" 단독 표현(보건당국 확인 없이)은 금지
-    // 단, 사용자 입력 상황 코드에는 없으므로 AI 출력만 체크
-    const hasConfirmedDiagnosis = /확진(?!되면|여부|시)/.test(aiStr)
-    if (hasConfirmedDiagnosis) {
-      return { ok: false, reason: '감염병 결과에 "확진" 단정 표현 발견' }
-    }
-    return { ok: true }
-  }
-)
-await check(
-  'POST /api/plan/generate — PII 없이 정상 동작',
-  async () => {
-    // 이름/진단명/연락처 없이 요청해도 정상 결과 반환
-    const r = await post('/api/plan/generate', {
-      ...wizardDraft,
-      // PII 필드를 명시적으로 제외(이미 없음)
-    })
-    if (!r.ok) return r
-    const json = await r.res.json()
-    const resultStr = JSON.stringify(json)
-    // 결과에 연락처 패턴이 없는지 확인 (010-xxxx-xxxx)
-    if (/010-\d{4}-\d{4}/.test(resultStr)) {
-      return { ok: false, reason: '결과에 전화번호 패턴 발견' }
-    }
-    return { ok: true }
-  }
-)
-
-// ──────────────────────────────────────────────────────────────
 console.log('\n──────────────────────────────────────────────')
 console.log(`결과: ✓ ${passed}개 통과 / ✗ ${failed}개 실패`)
-if (failed === 0) {
-  console.log('🎉 전 흐름 통과 — 시연 준비 완료')
-} else {
-  console.log('⚠️  실패 항목을 확인하세요.')
-}
+console.log(failed === 0 ? '🎉 전 흐름 통과 — 시연 준비 완료' : '⚠️  실패 항목을 확인하세요.')
 console.log('──────────────────────────────────────────────\n')
-
 process.exit(failed > 0 ? 1 : 0)

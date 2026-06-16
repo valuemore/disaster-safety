@@ -3,12 +3,36 @@
 > 세션이 길어져도 개발 맥락을 잃지 않기 위한 **단일 요약 문서**.
 > **운영 규칙**: 큰 작업/슬라이스를 마칠 때마다, 그리고 세션 종료 시 이 문서를 갱신한다. "다음 세션 시작 프롬프트"는 항상 최신화한다.
 >
-> 최종 업데이트: **2026-06-16** / 업데이트 주체: QA 종합 검증 (smoke-test 44/44, build 24라우트, 3유형×5역할 전 경로 PASS)
+> 최종 업데이트: **2026-06-16** / 업데이트 주체: 전면 리팩토링(R-series) — build 32라우트, smoke-test 30/30 PASS (샘플모드)
+
+---
+
+## 전면 리팩토링 (2026-06-16, R-series) — 실서비스형 흐름 전환
+계획 파일: `~/.claude/plans/vivid-orbiting-leaf.md`. 새 흐름: **로그인 → 재난문자(자동분류) → 상황 → 역할별 대응계획(읽기) → 공유/발송**.
+
+- **S-A 인증**: 간편 기관 로그인(등록번호+PIN, HMAC 서명 쿠키 `ds_session`). `lib/auth/{session,pin}.ts`, `app/api/auth/{login,logout,session}`, `app/login`, 루트 `proxy.ts`(Next16 미들웨어, `/plan`·`/account`·`/institutions` 가드). `RoleProvider`→`SessionProvider` 교체, 홈/AppHeader 개편.
+- **S-B 마법사 축소 + 화면 샘플 제거**: `/plan/new/type`·`/plan/new`(기관선택) 삭제. MessageInput 샘플탭 제거(실시간조회/원문만). WizardProgress 2단계. WizardDraft에서 `'sample'` source·`role` 제거, `disaster_type` nullable.
+- **S-C 재난유형 자동분류**: `classifyFromText`(키워드) + `lib/ai/classifyDisaster.ts`(AI보조) + `app/api/plan/classify`. generate route: institution_id를 **세션값으로 override**, 재난문자 `disaster_messages` INSERT, created_by_role='director'.
+- **S-D 결과 읽기화**: ChecklistCard/AfterActionForm/after-action·checklist API **삭제**(테이블은 보존). PlanResult 읽기전용. aiPlanSchema `after_action_draft` optional, 프롬프트에서 제거.
+- **S-E 어린이집포털 API**: `lib/external/childcareInfo.ts`(대소문자 정규화·파생값 infant/preschool/special·역할자동활성화 근거) + `app/api/external/childcare`. `app/register` 검색→자동채움→로그인정보→등록(자동로그인). `api_raw` 원본 보존.
+- **S-F 역할별 연락처**: `institution_staff_contacts`(0004, anon SELECT 없음) + `StaffContactsForm` + `/account/contacts` + `/api/account/contacts`(GET/PUT 세션 본인). consent_sms/kakao/share_link/is_active.
+- **S-G 공유**: `action_requests.share_token`(0004) + `/api/plan/[id]/share`(소유검증) + 공개 `/share/[token]/[role]` + `SharePanel`(링크복사/인쇄) + globals.css `@media print`.
+- **S-H 발송**: `lib/external/notify.ts`(알림톡→SMS→sample fallback, consent 게이트) + `/api/plan/[id]/notify` + `notify_logs`(0004). 발송 본문에 유아 PII 미포함.
+- **S-I 관리자 1,000+**: `/api/admin/institutions`(페이지네이션·검색·count) + `InstitutionTable`(검색/페이지) 로 전체로드 폐지. 활성기관(30일) 지표 추가.
+- **마이그레이션**: `supabase/migrations/0004_auth_and_sharing.sql`(멱등, 미적용 — 원격 DB 적용은 사용자 확인 후). 체크리스트/사후기록 테이블은 DROP 안 함.
+
+### 남은 작업 (refinement)
+- **S-E2(부분)**: 등록 시 재난안전 추가입력 필드(cooling_room_count, is_lowland_area 등 세부 키)는 미반영. 현재는 기존 `institution_risk_profiles.disaster_specific`(`/institutions/[id]/profile`)로 수집 가능하나, 등록 흐름과 미연결. buildAiInput 화이트리스트 확장 필요.
+- 개인정보 원칙 갱신은 CLAUDE.md 반영 완료. `docs/00·02·03·04·05` 본문 갱신은 후속.
+- 0004 마이그레이션 원격 적용 + 실 API(childcare/SMS/알림톡) 키 연동 검증.
+
+### 다음 세션 시작 프롬프트
+> "재난안전 리팩토링 후속: (1) S-E2 재난안전 추가입력 필드를 register/profile 흐름에 연결하고 buildAiInput 화이트리스트에 추가, (2) docs/00·02·03·04·05 본문을 새 흐름으로 갱신, (3) 0004 마이그레이션 원격 적용 후 실연동(childcare/SMS) 검증. 계획: ~/.claude/plans/vivid-orbiting-leaf.md, 현황: docs/07_CONTEXT_LEDGER.md R-series."
 
 ---
 
 ## 현재 MVP 목표
-폭염 재난문자 → 유아교육기관 역할별 체크리스트/학부모 안내문/사후기록 변환 웹 MVP. 공모전 제출용 작동형 시제품. 데모 본선(P0–P4) 우선.
+지자체 재난문자 → 유아교육기관 역할별 대응계획(읽기) + 공유. 실서비스형 흐름(로그인 시작). 공모전 제출용 작동형 시제품.
 
 ## 완료된 기능
 - 기획 문서 7종(`docs/00~06`) 작성.
