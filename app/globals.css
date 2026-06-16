@@ -128,3 +128,9 @@
     @apply font-sans;
   }
 }
+/* 출력/PDF: 네비·버튼·공유 패널 숨김, 본문만 인쇄 */
+@media print {
+  .print\:hidden { display: none !important; }
+  body { background: white; }
+  main { padding: 0 !important; }
+}
