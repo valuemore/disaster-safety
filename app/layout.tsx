@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { AppHeader } from '@/components/common/AppHeader'
 import { Toaster } from '@/components/ui/sonner'
-import { RoleProvider } from '@/components/providers/RoleProvider'
+import { SessionProvider } from '@/components/providers/SessionProvider'
 
 const geistSans = Geist({
   variable: '--font-sans',
@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: '재난안전MVP — 유아교육기관 폭염 대응 지원',
+  title: '재난안전MVP — 유아교육기관 재난 대응 지원',
   description:
-    '폭염 재난문자를 유아교육기관 운영상황에 맞게 원장·담임교사·통학버스 담당자별 체크리스트로 변환하는 AI 기반 재난대응 서비스',
+    '지자체 재난문자를 유아교육기관 운영상황에 맞게 원장·담임교사·통학버스·조리·보건 담당자별 대응계획으로 변환하는 AI 기반 재난대응 서비스',
 }
 
 export default function RootLayout({
@@ -32,11 +32,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background">
-        <RoleProvider>
+        <SessionProvider>
           <AppHeader />
           <main className="flex-1">{children}</main>
           <Toaster position="bottom-center" richColors />
-        </RoleProvider>
+        </SessionProvider>
       </body>
     </html>
   )

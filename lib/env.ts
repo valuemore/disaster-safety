@@ -26,6 +26,25 @@ export const MOIS_DISASTER_API_KEY = process.env.MOIS_DISASTER_API_KEY ?? ''
 export const CHILDCARE_API_KEY = process.env.CHILDCARE_API_KEY ?? ''
 export const KINDERGARTEN_API_KEY = process.env.KINDERGARTEN_API_KEY ?? ''
 
+/**
+ * 세션 쿠키 서명 비밀키 (서버 전용).
+ * 미설정 시 개발/시연용 고정 기본값 사용 — 프로덕션에서는 반드시 설정한다.
+ */
+export const SESSION_SECRET =
+  process.env.SESSION_SECRET || 'dsmvp-dev-session-secret-change-in-production'
+
+/** 알림/발송 (서버 전용) */
+export const KAKAO_ALIMTALK_API_KEY = process.env.KAKAO_ALIMTALK_API_KEY ?? ''
+export const KAKAO_ALIMTALK_SENDER_KEY = process.env.KAKAO_ALIMTALK_SENDER_KEY ?? ''
+export const SMS_API_KEY = process.env.SMS_API_KEY ?? ''
+export const SMS_API_SENDER = process.env.SMS_API_SENDER ?? ''
+/** 공유 링크·발송 본문에 들어갈 서비스 기본 URL */
+export const APP_BASE_URL =
+  process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_BASE_URL || ''
+
+/** 관리자 접근 키 (기관 로그인과 분리) */
+export const ADMIN_ACCESS_KEY = process.env.ADMIN_ACCESS_KEY ?? ''
+
 /** 설정 상태 헬퍼 */
 export const isAiConfigured = (): boolean =>
   !USE_SAMPLE_FALLBACK && ANTHROPIC_API_KEY.length > 0

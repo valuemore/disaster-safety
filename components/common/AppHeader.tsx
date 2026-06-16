@@ -1,86 +1,92 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useRole } from '@/components/providers/RoleProvider'
+import { useSession } from '@/components/providers/SessionProvider'
 import { Badge } from '@/components/ui/badge'
 
 const NAV_ITEMS = [
-  { href: '/', label: '홈', mobileLabel: '홈', alwaysShow: true },
-  { href: '/institutions', label: '기관 관리', mobileLabel: null, alwaysShow: false },
-  { href: '/plan/new', label: '대응계획 생성', mobileLabel: '계획', alwaysShow: true },
-  { href: '/admin', label: '관리자', mobileLabel: '관리자', alwaysShow: true },
+  { href: '/plan/new/message', label: '대응계획 생성', mobileLabel: '계획' },
+  { href: '/account/contacts', label: '담당자 연락처', mobileLabel: '연락처' },
 ]
-
-const ROLE_LABELS: Record<string, string> = {
-  director: '원장',
-  teacher: '담임교사',
-  shuttle: '통학버스',
-  cook_or_food_service: '조리사/급식담당자',
-  health_manager: '보건담당자',
-  admin: '지자체 관리자',
-}
 
 export function AppHeader() {
   const pathname = usePathname()
-  const { role } = useRole()
+  const router = useRouter()
+  const { institution, logout } = useSession()
+
+  // 로그인/등록/공유 화면에서는 네비게이션 최소화
+  const isAuthScreen =
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/' ||
+    pathname.startsWith('/share')
+
+  async function handleLogout() {
+    await logout()
+    toast.success('로그아웃되었습니다.')
+    router.push('/login')
+  }
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 print:hidden">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 px-4 py-3">
-        <Link href="/" className="flex shrink-0 items-center gap-1.5 font-semibold">
-          <span className="text-primary text-lg" aria-hidden="true">🌡️</span>
+        <Link
+          href={institution ? '/plan/new/message' : '/'}
+          className="flex shrink-0 items-center gap-1.5 font-semibold"
+        >
+          <span className="text-primary text-lg" aria-hidden="true">🛟</span>
           <span className="text-sm font-bold">재난안전MVP</span>
         </Link>
 
         <div className="flex min-w-0 items-center gap-1.5">
-          {role && (
-            <Link href="/" aria-label="역할 변경">
-              <Badge variant="secondary" className="hidden cursor-pointer text-xs sm:flex">
-                {ROLE_LABELS[role] ?? role} 변경
-              </Badge>
-            </Link>
-          )}
-
-          <nav className="flex items-center gap-0.5" aria-label="메인 네비게이션">
-            {NAV_ITEMS.map(({ href, label, mobileLabel, alwaysShow }) => {
-              const isActive = pathname === href
-              if (mobileLabel === null) {
-                // 모바일에서 숨김
+          {institution && !isAuthScreen && (
+            <nav className="flex items-center gap-0.5" aria-label="메인 네비게이션">
+              {NAV_ITEMS.map(({ href, label, mobileLabel }) => {
+                const isActive = pathname === href
                 return (
                   <Link
                     key={href}
                     href={href}
                     className={cn(
-                      'hidden rounded-md px-2.5 py-1.5 text-sm transition-colors sm:block',
+                      'rounded-md px-2 py-1.5 text-xs transition-colors sm:px-2.5 sm:text-sm',
                       isActive
                         ? 'bg-primary text-primary-foreground font-medium'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                     )}
                   >
-                    {label}
+                    <span className="sm:hidden">{mobileLabel}</span>
+                    <span className="hidden sm:inline">{label}</span>
                   </Link>
                 )
-              }
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    'rounded-md px-2 py-1.5 text-xs transition-colors sm:px-2.5 sm:text-sm',
-                    !alwaysShow && 'hidden sm:block',
-                    isActive
-                      ? 'bg-primary text-primary-foreground font-medium'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  <span className="sm:hidden">{mobileLabel}</span>
-                  <span className="hidden sm:inline">{label}</span>
-                </Link>
-              )
-            })}
-          </nav>
+              })}
+            </nav>
+          )}
+
+          {institution ? (
+            <>
+              <Badge variant="secondary" className="hidden max-w-[160px] truncate text-xs sm:flex">
+                {institution.name}
+              </Badge>
+              <button
+                onClick={handleLogout}
+                className="rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:text-sm"
+              >
+                로그아웃
+              </button>
+            </>
+          ) : (
+            !isAuthScreen && (
+              <Link
+                href="/login"
+                className="rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                로그인
+              </Link>
+            )
+          )}
         </div>
       </div>
     </header>

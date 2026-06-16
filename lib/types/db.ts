@@ -90,6 +90,40 @@ export interface Institution {
    * PII 없음: 인력 유무·수·유형만. 이름·연락처 없음.
    */
   staff_profile?: StaffProfile
+  /** 간편 로그인 식별번호 (0004) */
+  login_id?: string | null
+  /** PIN 해시 (0004) — 서버 전용, 클라이언트 직렬화 금지 */
+  pin_hash?: string | null
+  pin_set_at?: string | null
+  /** 어린이집정보공개포털 식별코드(stcode) (0004) */
+  external_code?: string | null
+  /** 포털 API 원본 JSON 보존 (0004) */
+  api_raw?: Record<string, unknown> | null
+  /** 아동수 출처: 'api' | 'user_corrected' (0004) */
+  child_count_source?: 'api' | 'user_corrected' | null
+  created_at: string
+  updated_at: string
+}
+
+/** 역할별 담당자 연락처 (0004) — 교직원 업무 연락처(수신동의 전제). 학부모 연락처 저장 금지. */
+export type StaffContactRole =
+  | 'director'
+  | 'homeroom_teacher'
+  | 'bus_manager'
+  | 'cook_or_food_service'
+  | 'health_manager'
+
+export interface StaffContact {
+  id: string
+  institution_id: string
+  role: StaffContactRole
+  name: string | null
+  phone: string | null
+  email: string | null
+  consent_sms: boolean
+  consent_kakao: boolean
+  consent_share_link: boolean
+  is_active: boolean
   created_at: string
   updated_at: string
 }
@@ -164,6 +198,8 @@ export interface ActionRequest {
   is_fallback: boolean
   model: string | null
   created_by_role: Role | null
+  /** 공유 링크 토큰 (0004) */
+  share_token?: string | null
   created_at: string
 }
 
@@ -219,7 +255,8 @@ export interface AiPlanResult {
   // 신규: 역할별 행동 배열 (핵심 구조)
   role_based_actions?: RoleBasedAction[]
   parent_notice: string
-  after_action_draft: {
+  /** @deprecated 사후기록 기능 제거 — 기존 샘플 호환을 위해 optional 유지 */
+  after_action_draft?: {
     // 신규: 재난유형별 동적 키-값
     checked_items?: Record<string, string | null>
     notes: string
