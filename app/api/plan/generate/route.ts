@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { USE_SAMPLE_FALLBACK } from '@/lib/env'
+import { getSessionInstitutionId } from '@/lib/auth/session'
 import { buildAiInput } from '@/lib/ai/buildAiInput'
 import { callClaudeWithFallback } from '@/lib/ai/callClaude'
 import { SAFETY_DISCLAIMER_FIXED } from '@/lib/ai/aiPlanSchema'
@@ -13,7 +14,6 @@ import {
   SAMPLE_HEAVY_RAIN_PROFILES,
   SAMPLE_INFECTION_PROFILES,
 } from '@/lib/sample'
-import { ROLEKEY_TO_DB_ROLE } from '@/lib/disaster/types'
 import { riskProfileToHeatwave } from '@/lib/disaster/profileMapping'
 import type { WizardDraft } from '@/lib/types/wizard'
 import type { Institution, HeatwaveProfile, InstitutionRiskProfile } from '@/lib/types/db'
@@ -26,6 +26,10 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: '요청 형식이 올바르지 않습니다.' }, { status: 400 })
   }
+
+  // 기관 ID는 로그인 세션을 신뢰한다 (클라이언트 body 값으로 위조 방지).
+  const sessionInstitutionId = await getSessionInstitutionId()
+  const institutionId = sessionInstitutionId ?? body.institution_id ?? null
 
   // 감염병(infection)은 재난문자 없이 상황만으로 생성 허용 (계획 §6, §5-2).
   // 폭염·집중호우는 재난문자 + 상황 모두 필수.
@@ -60,14 +64,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       data: {
         ...baseSample,
-        institution_id: body.institution_id ?? baseSample.institution_id,
-        // 감염병은 재난문자 없을 수 있으므로 null-safe 처리
-        disaster_message_id: isInfection
-          ? (body.disaster_message_id ?? null)
-          : baseSample.disaster_message_id,
+        institution_id: institutionId ?? baseSample.institution_id,
+        disaster_message_id: null,
         selected_situations: body.selected_situations,
         situation_etc: body.situation_etc || null,
-        created_by_role: body.role ?? 'director',
+        created_by_role: 'director',
       },
       source: 'sample',
     })
@@ -84,8 +85,8 @@ export async function POST(req: NextRequest) {
     const { createAdminSupabaseClient } = await import('@/lib/supabase/server')
     const supabase = createAdminSupabaseClient()
 
-    // 기관 조회
-    const instId = body.institution_id
+    // 기관 조회 (세션 기준 institutionId)
+    const instId = institutionId
     if (instId) {
       const { data, error } = await supabase
         .from('institutions')
@@ -169,15 +170,36 @@ export async function POST(req: NextRequest) {
     const { createAdminSupabaseClient } = await import('@/lib/supabase/server')
     const supabase = createAdminSupabaseClient()
 
+    // 재난문자 저장 (분류된 disaster_type 포함) — 실패해도 흐름 유지(null)
+    let disasterMessageId: string | null = null
+    if (body.disaster_message_text?.trim()) {
+      try {
+        const { data: dmData } = await supabase
+          .from('disaster_messages')
+          .insert({
+            institution_id: institution.id,
+            disaster_type: requestDisasterType,
+            source: body.disaster_message_source === 'api' ? 'api' : 'manual',
+            raw_text: body.disaster_message_text.trim(),
+            issued_at: body.disaster_message_issued_at ?? null,
+          })
+          .select('id')
+          .single()
+        disasterMessageId = dmData?.id ?? null
+      } catch (e) {
+        console.warn('[generate] disaster_messages 저장 실패(무시):', e)
+      }
+    }
+
     // action_request INSERT
     // risk_profile_id: institution_risk_profiles FK (0002 신규 컬럼, 주 값)
     // heatwave_profile_id: 레거시 컬럼 — nullable이므로 NULL로 남겨 deprecated 처리
+    // created_by_role: 기관 로그인 = 원장(director) 컨텍스트로 기록
     const { data: arData, error: arErr } = await supabase
       .from('action_requests')
       .insert({
         institution_id: institution.id,
-        disaster_message_id:
-          body.disaster_message_source === 'sample' ? body.disaster_message_id : null,
+        disaster_message_id: disasterMessageId,
         heatwave_profile_id: null,
         risk_profile_id: riskProfileId,
         selected_situations: body.selected_situations,
@@ -186,50 +208,15 @@ export async function POST(req: NextRequest) {
         result_json: result,
         is_fallback,
         model,
-        created_by_role: body.role ?? null,
+        created_by_role: 'director',
       })
       .select()
       .single()
 
     if (arErr) throw arErr
 
-    // checklist_items INSERT (역할별 펼침)
-    // T8-3: role_based_actions 기반으로 변경. role_based_actions가 없으면 레거시 필드 fallback.
-    let checklistRows: { action_request_id: string; role: string; sort_order: number; content: string }[] = []
-
-    if (result.role_based_actions && result.role_based_actions.length > 0) {
-      // role_based_actions → DB role 매핑 후 INSERT (5역할 모두: director/teacher/shuttle/cook_or_food_service/health_manager)
-      for (const roleAction of result.role_based_actions) {
-        const dbRole = ROLEKEY_TO_DB_ROLE[roleAction.role]
-        if (!dbRole) {
-          // 알 수 없는 role key — 방어적으로 skip
-          console.warn(`[generate] unknown role '${roleAction.role}' — skipping`)
-          continue
-        }
-        const rows = roleAction.actions
-          .filter((a) => a && a !== '해당 없음') // '해당 없음' 또는 빈 항목은 저장 제외
-          .map((content, i) => ({
-            action_request_id: arData.id,
-            role: dbRole,
-            sort_order: i,
-            content,
-          }))
-        checklistRows = checklistRows.concat(rows)
-      }
-    } else {
-      // 레거시 필드 fallback (role_based_actions 미존재 시)
-      const dir = result.director_checklist ?? []
-      const tea = result.teacher_checklist ?? []
-      const shu = result.shuttle_checklist ?? []
-      checklistRows = [
-        ...dir.map((content, i) => ({ action_request_id: arData.id, role: 'director', sort_order: i, content })),
-        ...tea.map((content, i) => ({ action_request_id: arData.id, role: 'teacher', sort_order: i, content })),
-        ...shu.map((content, i) => ({ action_request_id: arData.id, role: 'shuttle', sort_order: i, content })),
-      ]
-    }
-
-    await supabase.from('checklist_items').insert(checklistRows)
-
+    // 역할별 대응계획은 result_json.role_based_actions(읽기 전용)로 제공한다.
+    // (체크리스트/사후기록 제거 — checklist_items INSERT 폐지)
     return NextResponse.json({ data: arData, source: 'db' }, { status: 201 })
   } catch (err) {
     console.error('[POST /api/plan/generate] DB 저장 실패, 샘플 ID 반환:', err)
@@ -244,7 +231,7 @@ export async function POST(req: NextRequest) {
         result_json: result,
         is_fallback: true,
         model: 'sample-fallback',
-        created_by_role: body.role ?? null,
+        created_by_role: 'director',
       },
       source: 'sample',
     })

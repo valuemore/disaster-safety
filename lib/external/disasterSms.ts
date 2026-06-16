@@ -79,6 +79,15 @@ export function classifyDisasterType(
 }
 
 /**
+ * 재난문자 원문 텍스트만으로 재난유형을 분류한다.
+ * classifyDisasterType의 본문 키워드 분류를 재사용한다.
+ * (S-C: 마법사에서 재난유형 수동 선택을 제거하고 자동 분류로 대체)
+ */
+export function classifyFromText(rawText: string): DisasterType | 'other' {
+  return classifyDisasterType({ MSG_CN: rawText })
+}
+
+/**
  * CRT_DT 날짜 문자열(슬래시 형식 또는 ISO 형식)을 ISO 8601로 정규화.
  * 예: "2023/09/19 12:22:17" → "2023-09-19T12:22:17+09:00"
  */

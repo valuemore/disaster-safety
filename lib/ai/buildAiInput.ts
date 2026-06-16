@@ -119,7 +119,8 @@ export function buildAiInput(
   profile: HeatwaveProfile | InstitutionRiskProfile,
   weatherContext: WeatherContext
 ): AiInput {
-  const disasterType = draft.disaster_type
+  // disaster_type은 자동 분류로 채워지나, 미분류('other'→null) 시 폭염 기본값으로 안전 처리
+  const disasterType = draft.disaster_type ?? 'heatwave'
 
   const base: AiInput = {
     disaster_type: disasterType,
