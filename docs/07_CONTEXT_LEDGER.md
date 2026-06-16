@@ -38,9 +38,18 @@
 - 개발: `lib/external/childcareInfo.ts`(실 엔드포인트·XML 파서·정규화·`isGuideTemplate` 탐지). 구축: `/register`에 이름검색 + 코드(arcode+stcode) 직접조회 UI + `/api/external/childcare?arcode=&code=`. 테스트: 라이브 호출(가이드→fallback) + 합성 실데이터 12/12.
 - 운영키 적용 시 `source:'api'` 실데이터 자동 채움(코드 변경 불필요).
 
+### 프로덕션 배포 (2026-06-16, R-series)
+- `vercel --prod` 배포 완료. URL: https://disastersafety.vercel.app (READY). 커밋 5307a3a 기준.
+- Vercel 프로덕션 env에 **SESSION_SECRET 신규 등록**(랜덤 48B) — 세션 위조 방지.
+- 프로덕션은 **실 DB 모드**(USE_SAMPLE_FALLBACK=false). 0004 적용 완료된 Supabase 사용.
+- 검증: `/`,`/login`,`/register`,`/api/auth/session` 200. childcare는 개발키→sample.
+- **로그인 주의**: 시드 기관 3곳은 login_id/pin_hash가 NULL이라 로그인 불가 → `/register`로 신규 기관 등록(자동 로그인) 또는 시드 기관에 PIN 시딩 필요.
+- 미설정(선택) Vercel env: MOIS_DISASTER_API_KEY, CHILDCARE_API_KEY(개발키), APP_BASE_URL, KAKAO_*/SMS_*, ADMIN_ACCESS_KEY — 모두 fallback 동작.
+
 ### 남은 작업 (refinement)
 - **운영 계정 인증키 신청·승인 후 실데이터 검증**(사용자 진행 예정). 추가로 이름 검색엔 목록 API(cpmsapi003) 승인 필요.
-- SMS/알림톡 키 확보 후 실발송 검증.
+- SMS/알림톡 키 확보 후 실발송 검증. APP_BASE_URL 설정 시 발송 링크 절대경로화.
+- 데모 로그인 편의: 시드 기관 PIN 시딩 또는 안내.
 - 'other' 재난유형 UX 확정(현재: 수동 선택 폴백).
 
 ### 다음 세션 시작 프롬프트
