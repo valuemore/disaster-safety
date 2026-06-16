@@ -33,13 +33,13 @@
 - Supabase Management API(`/v1/projects/{ref}/database/query`)로 적용. 멱등 do-block/if-not-exists 구조.
 - 검증: institution_staff_contacts·notify_logs 생성, institutions 신규 6컬럼, action_requests.share_token, 유니크 인덱스(login_id·share_token·(institution_id,role)), staff_contacts RLS=on·anon 정책 0건(service_role 전용).
 
-### 어린이집포털 cpmsapi030 실연동 (2026-06-16)
-- 실 엔드포인트(`cpmsapi030`)·XML 파서·필드 정규화(대/소문자, `sigunname`, `CHILD_CNT_*`/`EM_CNT_A*`)·가이드 템플릿 탐지 구현. 합성 실데이터 12/12 검증.
-- **키 제약**: cpmsapi030(상세)만 승인. cpmsapi002/003(목록) 미승인(INFO-100) → 이름 검색 불가(코드 기반 `arcode`+`stcode` 상세조회만). 현재 응답은 가이드 템플릿 → fallback. 실데이터엔 목록 API 승인+유효 코드 필요.
-- `/api/external/childcare?arcode=&code=` 실조회 지원, `?q=`는 예시 fallback.
+### 어린이집포털 cpmsapi030 — 개발/구축/테스트 완료 (2026-06-16)
+- **현재 키 = 개발 계정 인증키** → cpmsapi030가 가이드 레이아웃 템플릿 반환(정상). 실데이터는 **운영 계정 인증키**(재심의 승인) 적용 시. 사용자가 추후 운영키 신청 예정.
+- 개발: `lib/external/childcareInfo.ts`(실 엔드포인트·XML 파서·정규화·`isGuideTemplate` 탐지). 구축: `/register`에 이름검색 + 코드(arcode+stcode) 직접조회 UI + `/api/external/childcare?arcode=&code=`. 테스트: 라이브 호출(가이드→fallback) + 합성 실데이터 12/12.
+- 운영키 적용 시 `source:'api'` 실데이터 자동 채움(코드 변경 불필요).
 
 ### 남은 작업 (refinement)
-- 어린이집포털 **목록 API(cpmsapi003) 활용 신청·승인** → 이름 검색 실데이터화. (현재 cpmsapi030만 승인)
+- **운영 계정 인증키 신청·승인 후 실데이터 검증**(사용자 진행 예정). 추가로 이름 검색엔 목록 API(cpmsapi003) 승인 필요.
 - SMS/알림톡 키 확보 후 실발송 검증.
 - 'other' 재난유형 UX 확정(현재: 수동 선택 폴백).
 

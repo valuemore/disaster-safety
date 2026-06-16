@@ -21,10 +21,27 @@ export default function RegisterPage() {
   const [candidates, setCandidates] = useState<ChildcareInstitutionInfo[]>([])
   const [selected, setSelected] = useState<ChildcareInstitutionInfo | null>(null)
 
+  // cpmsapi030 코드 기반 실 상세조회 (운영 인증키 적용 시 실데이터)
+  const [arcode, setArcode] = useState('')
+  const [stcode, setStcode] = useState('')
+  const [codeLoading, setCodeLoading] = useState(false)
+
   const [loginId, setLoginId] = useState('')
   const [pin, setPin] = useState('')
   const [pin2, setPin2] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  /** 응답 메타에 따른 안내 토스트 (개발키/목록API 상태 구분) */
+  function notifySource(source: string, error?: string) {
+    if (source === 'api') return
+    if (error === 'guide_template_only') {
+      toast.info('개발용 인증키 응답(레이아웃 가이드)입니다. 운영 인증키 적용 시 실데이터가 표시됩니다. 우선 예시값으로 진행할 수 있습니다.')
+    } else if (error === 'list_api_unavailable') {
+      toast.info('이름 검색은 목록 API 승인 후 제공됩니다. 어린이집 코드로 불러오거나 예시값으로 진행하세요.')
+    } else {
+      toast.info('포털 API 응답이 없어 예시 결과를 표시합니다.')
+    }
+  }
 
   async function handleSearch() {
     if (!query.trim()) {
@@ -36,14 +53,37 @@ export default function RegisterPage() {
       const res = await fetch(`/api/external/childcare?q=${encodeURIComponent(query.trim())}&type=${type}`)
       const json = await res.json()
       setCandidates(json.data ?? [])
-      if (json.source === 'sample') {
-        toast.info('포털 API 키 미설정 — 예시 결과를 표시합니다.')
-      }
+      notifySource(json.source, json.error)
       if ((json.data ?? []).length === 0) toast.error('검색 결과가 없습니다.')
     } catch {
       toast.error('검색에 실패했습니다.')
     } finally {
       setSearching(false)
+    }
+  }
+
+  /** cpmsapi030 코드 기반 실 상세조회 */
+  async function handleCodeLookup() {
+    if (!arcode.trim() || !stcode.trim()) {
+      toast.error('지역코드(arcode)와 어린이집코드(stcode)를 입력하세요.')
+      return
+    }
+    setCodeLoading(true)
+    try {
+      const res = await fetch(
+        `/api/external/childcare?arcode=${encodeURIComponent(arcode.trim())}&code=${encodeURIComponent(stcode.trim())}&type=${type}`
+      )
+      const json = await res.json()
+      setCandidates(json.data ?? [])
+      notifySource(json.source, json.error)
+      if (json.source === 'api' && (json.data ?? []).length > 0) {
+        toast.success('포털 실데이터를 불러왔습니다.')
+        handleSelect(json.data[0])
+      }
+    } catch {
+      toast.error('조회에 실패했습니다.')
+    } finally {
+      setCodeLoading(false)
     }
   }
 
@@ -145,6 +185,35 @@ export default function RegisterPage() {
               {searching ? '검색 중…' : '검색'}
             </Button>
           </div>
+
+          {/* 어린이집 코드로 직접 조회 (cpmsapi030 상세 — 운영 인증키 적용 시 실데이터) */}
+          <details className="rounded-md border bg-muted/30 p-2">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+              어린이집 코드로 불러오기 (지역코드 + 어린이집코드)
+            </summary>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={arcode}
+                onChange={(e) => setArcode(e.target.value)}
+                placeholder="지역코드(arcode)"
+                className="flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                value={stcode}
+                onChange={(e) => setStcode(e.target.value)}
+                placeholder="어린이집코드(stcode)"
+                className="flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+              />
+              <Button variant="outline" onClick={handleCodeLookup} disabled={codeLoading} className="shrink-0">
+                {codeLoading ? '조회 중…' : '불러오기'}
+              </Button>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              현재는 개발용 인증키로 레이아웃 응답만 제공됩니다. 운영 인증키 승인 후 실데이터가 자동 반영됩니다.
+            </p>
+          </details>
 
           {candidates.length > 0 && (
             <div className="space-y-2">
