@@ -43,14 +43,14 @@
 - Vercel 프로덕션 env에 **SESSION_SECRET 신규 등록**(랜덤 48B) — 세션 위조 방지.
 - 프로덕션은 **실 DB 모드**(USE_SAMPLE_FALLBACK=false). 0004 적용 완료된 Supabase 사용.
 - 검증: `/`,`/login`,`/register`,`/api/auth/session` 200. childcare는 개발키→sample.
-- **로그인 주의**: 시드 기관 3곳은 login_id/pin_hash가 NULL이라 로그인 불가 → `/register`로 신규 기관 등록(자동 로그인) 또는 시드 기관에 PIN 시딩 필요.
+- **데모 로그인 시딩 완료(2026-06-16)**: 시드 기관 3곳에 데모 자격 부여(scrypt pin_hash, lib/auth/pin.ts 동일 형식). `demo`/`demo2`/`demo3` · PIN `1234` (각 햇살/무지개/새싹). 프로덕션 로그인 200 검증, 오류 PIN 401. 데모용 약한 PIN이므로 실서비스 전 변경/제거 권장.
 - 미설정(선택) Vercel env: MOIS_DISASTER_API_KEY, CHILDCARE_API_KEY(개발키), APP_BASE_URL, KAKAO_*/SMS_*, ADMIN_ACCESS_KEY — 모두 fallback 동작.
 
 ### 남은 작업 (refinement)
 - **운영 계정 인증키 신청·승인 후 실데이터 검증**(사용자 진행 예정). 추가로 이름 검색엔 목록 API(cpmsapi003) 승인 필요.
 - SMS/알림톡 키 확보 후 실발송 검증. APP_BASE_URL 설정 시 발송 링크 절대경로화.
-- 데모 로그인 편의: 시드 기관 PIN 시딩 또는 안내.
 - 'other' 재난유형 UX 확정(현재: 수동 선택 폴백).
+- (실서비스 전) 데모 로그인 PIN 변경/제거.
 
 ### 다음 세션 시작 프롬프트
 > "재난안전 리팩토링 후속: (1) 실연동(childcare/SMS/알림톡) 키 확보 후 검증, (2) 'other' 재난유형 UX 확정. 계획: ~/.claude/plans/vivid-orbiting-leaf.md, 현황: docs/07_CONTEXT_LEDGER.md R-series."
