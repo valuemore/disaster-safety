@@ -38,19 +38,19 @@ export const AiPlanSchema = z.object({
   // ── 학부모 안내문 ─────────────────────────────────────────────────────────
   parent_notice: z.string().min(1),
 
-  // ── 사후기록 초안 (범용화 + 폭염 레거시 optional) ─────────────────────────
-  after_action_draft: z.object({
-    // 신규: 재난유형별 동적 키-값
-    checked_items: z.record(z.string(), z.string().nullable()),
-    notes: z.string(),
-    improvement: z.string(),
-    // 폭염 레거시 필드 — optional 유지 (소비처 호환)
-    outdoor_adjusted: z.string().nullable().optional(),
-    cooling_checked: z.string().nullable().optional(),
-    child_health_issue: z.string().nullable().optional(),
-    parents_notified: z.string().nullable().optional(),
-    shuttle_checked: z.string().nullable().optional(),
-  }),
+  // ── 사후기록 초안 (deprecated: 사후기록 기능 제거 — optional 유지로 기존 샘플 호환) ──
+  after_action_draft: z
+    .object({
+      checked_items: z.record(z.string(), z.string().nullable()),
+      notes: z.string(),
+      improvement: z.string(),
+      outdoor_adjusted: z.string().nullable().optional(),
+      cooling_checked: z.string().nullable().optional(),
+      child_health_issue: z.string().nullable().optional(),
+      parents_notified: z.string().nullable().optional(),
+      shuttle_checked: z.string().nullable().optional(),
+    })
+    .optional(),
 
   // ── 응급/공식기관/disclaimer ──────────────────────────────────────────────
   emergency_contact_guide: z.string().min(1),

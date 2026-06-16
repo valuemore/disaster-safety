@@ -27,13 +27,6 @@ export const OUTPUT_SCHEMA_HINT = `아래 JSON 스키마에 정확히 맞는 객
     }
   ],
   "parent_notice": "학부모 안내문(공포 금지, 안정감, 구체 행동)",
-  "after_action_draft": {
-    "checked_items": {
-      "항목키": "null 또는 권고 메모"
-    },
-    "notes": "특이사항 초안(개인식별정보 금지)",
-    "improvement": "개선 필요사항 초안"
-  },
   "emergency_contact_guide": "응급 연락 안내(119 등 공식 채널 우선)",
   "official_priority_notice": "공식기관 지시 우선 안내문",
   "safety_disclaimer": "공식 재난문자와 기관 입력정보를 바탕으로 한 대응지원 정보이며, 위급상황에서는 공식기관 지시와 119 안내를 우선합니다."
