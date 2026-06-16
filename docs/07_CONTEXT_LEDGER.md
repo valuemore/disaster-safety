@@ -29,12 +29,16 @@
 ### 문서 갱신 완료 (2026-06-16)
 - `docs/00_PRD`·`02_DB_SCHEMA`·`03_API_INTEGRATION_PLAN`·`04_AI_PROMPT_SPEC`·`05_UI_FLOW` 본문을 새 흐름(로그인→자동분류→읽기계획→공유/발송)으로 갱신. CLAUDE.md·07·08 포함 전 문서 동기화.
 
+### 0004 마이그레이션 원격 적용 완료 (2026-06-16)
+- Supabase Management API(`/v1/projects/{ref}/database/query`)로 적용. 멱등 do-block/if-not-exists 구조.
+- 검증: institution_staff_contacts·notify_logs 생성, institutions 신규 6컬럼, action_requests.share_token, 유니크 인덱스(login_id·share_token·(institution_id,role)), staff_contacts RLS=on·anon 정책 0건(service_role 전용).
+
 ### 남은 작업 (refinement)
-- 0004 마이그레이션 원격 적용 + 실 API(childcare/SMS/알림톡) 키 연동 검증.
+- 실 API(childcare/SMS/알림톡) 키 연동 검증(키 확보 시).
 - 'other' 재난유형 UX 확정(현재: 수동 선택 폴백).
 
 ### 다음 세션 시작 프롬프트
-> "재난안전 리팩토링 후속: (1) 0004 마이그레이션 원격 적용 후 실연동(childcare/SMS/알림톡) 키 검증, (2) 'other' 재난유형 UX 확정. 계획: ~/.claude/plans/vivid-orbiting-leaf.md, 현황: docs/07_CONTEXT_LEDGER.md R-series."
+> "재난안전 리팩토링 후속: (1) 실연동(childcare/SMS/알림톡) 키 확보 후 검증, (2) 'other' 재난유형 UX 확정. 계획: ~/.claude/plans/vivid-orbiting-leaf.md, 현황: docs/07_CONTEXT_LEDGER.md R-series."
 
 ---
 

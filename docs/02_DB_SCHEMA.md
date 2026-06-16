@@ -33,7 +33,7 @@ action_requests (1) ──< (1) after_action_records        [@deprecated — 미
 | `supabase/migrations/0001_initial.sql` | 기초 6개 테이블(institutions, heatwave_profiles, disaster_messages, action_requests, checklist_items, after_action_records), RLS, 트리거, 시드 | 완료 |
 | `supabase/migrations/0002_disaster_expansion.sql` | institution_risk_profiles 신규, staff_profile 컬럼, disaster_type CHECK 3종, checklist_items.role 5종 확장, risk_profile_id, after_action checked_items, heatwave 데이터 이관 | 완료 (원격 DB 적용) |
 | `supabase/migrations/0003_role_expansion.sql` | cook_or_food_service·health_manager 역할 관련 추가 확장 (필요 시) | 참조용 |
-| `supabase/migrations/0004_auth_and_sharing.sql` | institutions 인증/포털 컬럼(login_id·pin_hash·external_code·api_raw·child_count_source), institution_staff_contacts 신규, action_requests.share_token, notify_logs 신규 | 작성 완료 (**원격 DB 미적용** — 사용자 확인 후 실행) |
+| `supabase/migrations/0004_auth_and_sharing.sql` | institutions 인증/포털 컬럼(login_id·pin_hash·external_code·api_raw·child_count_source), institution_staff_contacts 신규, action_requests.share_token, notify_logs 신규 | **완료 (원격 DB 적용 2026-06-16)** |
 
 ---
 
