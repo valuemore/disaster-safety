@@ -8,17 +8,15 @@ export type { WizardDraft } from '@/lib/types/wizard'
 const STORAGE_KEY = 'dsmvp_wizard_draft'
 
 const EMPTY_DRAFT: WizardDraft = {
-  disaster_type: 'heatwave',
+  disaster_type: null,
   institution_id: null,
   institution_name: null,
   has_shuttle: false,
-  disaster_message_id: null,
   disaster_message_text: '',
-  disaster_message_source: 'sample',
+  disaster_message_source: 'manual',
   disaster_message_issued_at: null,
   selected_situations: [],
   situation_etc: '',
-  role: null,
 }
 
 function load(): WizardDraft {

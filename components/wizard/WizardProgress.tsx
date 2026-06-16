@@ -1,14 +1,12 @@
 import { cn } from '@/lib/utils'
 
 const STEPS = [
-  { label: '재난유형 선택', short: '유형' },
-  { label: '재난문자 선택', short: '재난문자' },
+  { label: '재난문자 입력', short: '재난문자' },
   { label: '현재 상황 선택', short: '상황 선택' },
-  { label: '대응계획 생성', short: '생성' },
 ]
 
 interface WizardProgressProps {
-  currentStep: 1 | 2 | 3 | 4 // 1=type, 2=message, 3=situation, 4=generate
+  currentStep: 1 | 2 // 1=message(+자동분류), 2=situation(+생성)
 }
 
 export function WizardProgress({ currentStep }: WizardProgressProps) {

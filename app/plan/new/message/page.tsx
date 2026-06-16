@@ -8,12 +8,12 @@ export const metadata = {
 export default function MessagePage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <WizardProgress currentStep={2} />
+      <WizardProgress currentStep={1} />
 
       <div className="mb-6">
-        <h1 className="text-xl font-bold">재난문자 선택</h1>
+        <h1 className="text-xl font-bold">재난문자 입력</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          대응계획을 생성할 재난문자를 선택하거나 원문을 붙여넣으세요.
+          수신한 재난문자를 붙여넣거나 실시간으로 조회하세요. 재난유형은 자동으로 분류됩니다.
         </p>
       </div>
 

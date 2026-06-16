@@ -30,16 +30,13 @@ async function getInstitutions(): Promise<{ data: Institution[]; source: string 
 const TYPE_LABEL = { daycare: '어린이집', kindergarten: '유치원' } as const
 
 export default async function InstitutionsPage() {
-  const { data: institutions, source } = await getInstitutions()
+  const { data: institutions } = await getInstitutions()
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">기관 관리</h1>
-          {source === 'sample' && (
-            <p className="mt-1 text-xs text-muted-foreground">샘플 데이터로 표시 중</p>
-          )}
         </div>
         <Link href="/institutions/new">
           <Button size="sm">+ 기관 등록</Button>

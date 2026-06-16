@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useWizardState } from '@/lib/hooks/useWizardState'
-import { useRole } from '@/components/providers/RoleProvider'
 import { DISASTER_REGISTRY } from '@/lib/disaster/registry'
 import type { SituationCode } from '@/lib/types/db'
 
@@ -14,7 +13,6 @@ const MAX_SELECT = 3
 export function SituationPicker() {
   const router = useRouter()
   const { get, update } = useWizardState()
-  const { role } = useRole()
   const draft = get()
 
   // 재난유형별 상황 목록을 레지스트리에서 동적 로드
@@ -59,7 +57,6 @@ export function SituationPicker() {
         ...get(),
         selected_situations: selected,
         situation_etc: etcText.trim(),
-        role,
       }
       const res = await fetch('/api/plan/generate', {
         method: 'POST',
