@@ -21,13 +21,17 @@
 - **S-I 관리자 1,000+**: `/api/admin/institutions`(페이지네이션·검색·count) + `InstitutionTable`(검색/페이지) 로 전체로드 폐지. 활성기관(30일) 지표 추가.
 - **마이그레이션**: `supabase/migrations/0004_auth_and_sharing.sql`(멱등, 미적용 — 원격 DB 적용은 사용자 확인 후). 체크리스트/사후기록 테이블은 DROP 안 함.
 
+### S-E2 완료 (2026-06-16)
+- 등록 직후 `/institutions/[id]/profile?onboarding=1`로 이동 → 재난안전 추가정보(기존 institution_risk_profiles) 입력 + "다음: 담당자 연락처" 온보딩 동선.
+- 생성 단계에 **당일 재원·등원 유아수/출근 교직원수**(선택) 입력 → `buildAiInput` institution 화이트리스트(`today_present_*`)로 AI 전달.
+- 참고: 요청 세부 필드(cooling_room_count, is_lowland_area 등)는 기존 `disaster_specific` 키(cooling_ok, low_ground 등)로 이미 수집 — 개명 없이 매핑 유지.
+
 ### 남은 작업 (refinement)
-- **S-E2(부분)**: 등록 시 재난안전 추가입력 필드(cooling_room_count, is_lowland_area 등 세부 키)는 미반영. 현재는 기존 `institution_risk_profiles.disaster_specific`(`/institutions/[id]/profile`)로 수집 가능하나, 등록 흐름과 미연결. buildAiInput 화이트리스트 확장 필요.
-- 개인정보 원칙 갱신은 CLAUDE.md 반영 완료. `docs/00·02·03·04·05` 본문 갱신은 후속.
+- `docs/00·02·03·04·05` 본문 갱신(새 흐름 반영)은 후속. (CLAUDE.md·07·08은 반영 완료)
 - 0004 마이그레이션 원격 적용 + 실 API(childcare/SMS/알림톡) 키 연동 검증.
 
 ### 다음 세션 시작 프롬프트
-> "재난안전 리팩토링 후속: (1) S-E2 재난안전 추가입력 필드를 register/profile 흐름에 연결하고 buildAiInput 화이트리스트에 추가, (2) docs/00·02·03·04·05 본문을 새 흐름으로 갱신, (3) 0004 마이그레이션 원격 적용 후 실연동(childcare/SMS) 검증. 계획: ~/.claude/plans/vivid-orbiting-leaf.md, 현황: docs/07_CONTEXT_LEDGER.md R-series."
+> "재난안전 리팩토링 후속: (1) docs/00·02·03·04·05 본문을 새 흐름(로그인→자동분류→읽기계획→공유)으로 갱신, (2) 0004 마이그레이션 원격 적용 후 실연동(childcare/SMS/알림톡) 키 검증, (3) 'other' 재난유형 UX 확정. 계획: ~/.claude/plans/vivid-orbiting-leaf.md, 현황: docs/07_CONTEXT_LEDGER.md R-series."
 
 ---
 
