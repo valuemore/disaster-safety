@@ -2,13 +2,12 @@ export const dynamic = 'force-dynamic'
 
 import { StatsCards } from '@/components/admin/StatsCards'
 import { RecentPlanList } from '@/components/admin/RecentPlanList'
-import { InstitutionCard } from '@/components/admin/InstitutionCard'
+import { InstitutionTable } from '@/components/admin/InstitutionTable'
 import { DisasterTypeSummary } from '@/components/admin/DisasterTypeSummary'
 import { USE_SAMPLE_FALLBACK } from '@/lib/env'
 import { SAMPLE_ADMIN_STATS, SAMPLE_ADMIN_PLANS } from '@/lib/sample/admin'
-import { SAMPLE_INSTITUTIONS } from '@/lib/sample'
 import type { AdminStats, AdminPlanRow } from '@/lib/sample/admin'
-import type { Institution, DisasterType } from '@/lib/types/db'
+import type { DisasterType } from '@/lib/types/db'
 
 /**
  * AdminPlanRow 배열에서 재난유형별 건수를 집계한다.
@@ -32,14 +31,14 @@ function aggregateDisasterTypeCounts(
 async function getAdminData(): Promise<{
   stats: AdminStats
   plans: AdminPlanRow[]
-  institutions: Institution[]
+  activeCount: number
   isSample: boolean
 }> {
   if (USE_SAMPLE_FALLBACK) {
     return {
       stats: SAMPLE_ADMIN_STATS,
       plans: SAMPLE_ADMIN_PLANS,
-      institutions: SAMPLE_INSTITUTIONS,
+      activeCount: 2,
       isSample: true,
     }
   }
@@ -50,8 +49,9 @@ async function getAdminData(): Promise<{
 
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
-    const [instResult, todayResult, highResult, plansResult, institutionsResult] =
+    const [instResult, todayResult, highResult, plansResult, activeResult] =
       await Promise.all([
         supabase.from('institutions').select('id', { count: 'exact', head: true }),
         supabase
@@ -68,7 +68,11 @@ async function getAdminData(): Promise<{
           .select(`id, institution_id, priority, is_fallback, created_by_role, created_at, result_json, institutions!inner(name)`)
           .order('created_at', { ascending: false })
           .limit(50),
-        supabase.from('institutions').select('*').order('created_at', { ascending: false }),
+        // 활성 기관(최근 30일 계획 생성) — 계획 건수 기준 근사
+        supabase
+          .from('action_requests')
+          .select('institution_id', { count: 'exact', head: true })
+          .gte('created_at', monthAgo.toISOString()),
       ])
 
     const plans: AdminPlanRow[] = (plansResult.data ?? []).map((row: Record<string, unknown>) => {
@@ -97,22 +101,20 @@ async function getAdminData(): Promise<{
       disaster_type_counts,
     }
 
-    const institutions = (institutionsResult.data ?? []) as Institution[]
-
-    return { stats, plans, institutions, isSample: false }
+    return { stats, plans, activeCount: activeResult.count ?? 0, isSample: false }
   } catch (err) {
     console.error('[admin page]', err)
     return {
       stats: SAMPLE_ADMIN_STATS,
       plans: SAMPLE_ADMIN_PLANS,
-      institutions: SAMPLE_INSTITUTIONS,
+      activeCount: 2,
       isSample: true,
     }
   }
 }
 
 export default async function AdminPage() {
-  const { stats, plans, institutions, isSample } = await getAdminData()
+  const { stats, plans, activeCount, isSample } = await getAdminData()
 
   // 재난유형별 건수: stats 에 포함된 값 우선, 없으면 plans 에서 클라이언트 집계
   const disasterTypeCounts =
@@ -128,6 +130,9 @@ export default async function AdminPage() {
       {/* 통계 카드 */}
       <section className="mb-6">
         <StatsCards stats={stats} isSample={isSample} />
+        <p className="mt-2 text-xs text-muted-foreground">
+          최근 30일 활성(계획 생성) 건수: <span className="font-medium text-foreground">{activeCount.toLocaleString()}</span>
+        </p>
       </section>
 
       {/* 재난유형별 생성 현황 */}
@@ -143,20 +148,12 @@ export default async function AdminPage() {
         <RecentPlanList plans={plans} title="최근 대응계획" showInstitution />
       </section>
 
-      {/* 등록 기관 목록 (역할 지정 현황 포함) */}
+      {/* 등록 기관 목록 (검색 + 페이지네이션 — 1,000개+ 대비) */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold">등록 기관 · 역할 지정 현황</h2>
-        <div className="space-y-3">
-          {institutions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">등록된 기관이 없습니다.</p>
-          ) : (
-            institutions.map((inst) => (
-              <InstitutionCard key={inst.id} institution={inst} showDetailLink />
-            ))
-          )}
-        </div>
+        <h2 className="mb-3 text-sm font-semibold">등록 기관</h2>
+        <InstitutionTable />
         <p className="mt-2 text-xs text-muted-foreground">
-          역할 지정 현황은 기관 프로필 기반 참고 정보이며, 실제 법적 의무 여부는 관할 기관에 직접 확인하세요.
+          기관별 상세는 기관명을 눌러 확인하세요. 역할 지정·법적 의무 여부는 관할 기관에 직접 확인하세요.
         </p>
       </section>
     </div>
