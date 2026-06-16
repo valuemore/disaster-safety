@@ -33,8 +33,14 @@
 - Supabase Management API(`/v1/projects/{ref}/database/query`)로 적용. 멱등 do-block/if-not-exists 구조.
 - 검증: institution_staff_contacts·notify_logs 생성, institutions 신규 6컬럼, action_requests.share_token, 유니크 인덱스(login_id·share_token·(institution_id,role)), staff_contacts RLS=on·anon 정책 0건(service_role 전용).
 
+### 어린이집포털 cpmsapi030 실연동 (2026-06-16)
+- 실 엔드포인트(`cpmsapi030`)·XML 파서·필드 정규화(대/소문자, `sigunname`, `CHILD_CNT_*`/`EM_CNT_A*`)·가이드 템플릿 탐지 구현. 합성 실데이터 12/12 검증.
+- **키 제약**: cpmsapi030(상세)만 승인. cpmsapi002/003(목록) 미승인(INFO-100) → 이름 검색 불가(코드 기반 `arcode`+`stcode` 상세조회만). 현재 응답은 가이드 템플릿 → fallback. 실데이터엔 목록 API 승인+유효 코드 필요.
+- `/api/external/childcare?arcode=&code=` 실조회 지원, `?q=`는 예시 fallback.
+
 ### 남은 작업 (refinement)
-- 실 API(childcare/SMS/알림톡) 키 연동 검증(키 확보 시).
+- 어린이집포털 **목록 API(cpmsapi003) 활용 신청·승인** → 이름 검색 실데이터화. (현재 cpmsapi030만 승인)
+- SMS/알림톡 키 확보 후 실발송 검증.
 - 'other' 재난유형 UX 확정(현재: 수동 선택 폴백).
 
 ### 다음 세션 시작 프롬프트
