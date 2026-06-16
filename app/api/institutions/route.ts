@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { createAdminSupabaseClient } from '@/lib/supabase/server'
 import { USE_SAMPLE_FALLBACK } from '@/lib/env'
 import { SAMPLE_INSTITUTIONS } from '@/lib/sample'
+import { hashPin } from '@/lib/auth/pin'
+import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/auth/session'
 
 // ── StaffProfile zod 스키마 ──────────────────────────────────────────────────
 // PII 없음: 인력 유무·수·유형만. 이름·연락처·진단명 없음.
@@ -40,6 +42,12 @@ const InstitutionSchema = z.object({
   water_available: z.boolean().default(false),
   /** 급식·보건 인력 프로필 (0002 추가 컬럼). 미입력 시 기본값 '{}' 유지. */
   staff_profile: StaffProfileSchema,
+  // ── 간편 로그인 + 포털 API 보강 (0004) ──
+  login_id: z.string().min(1).max(50).optional(),
+  pin: z.string().min(4).max(8).optional(),
+  external_code: z.string().max(60).optional().nullable(),
+  api_raw: z.record(z.string(), z.unknown()).optional().nullable(),
+  child_count_source: z.enum(['api', 'user_corrected']).optional().nullable(),
 })
 
 export async function GET() {
@@ -78,24 +86,35 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // pin → pin_hash 변환 (평문 PIN은 저장하지 않음)
+  const { pin, ...rest } = parsed.data
+  const insertData: Record<string, unknown> = { ...rest }
+  if (pin) {
+    insertData.pin_hash = hashPin(pin)
+    insertData.pin_set_at = new Date().toISOString()
+  }
+
   if (USE_SAMPLE_FALLBACK) {
-    // 샘플 모드: 실제 저장 없이 첫 번째 샘플 기관 ID 반환(데모 흐름 유지)
-    return NextResponse.json({
-      data: { ...SAMPLE_INSTITUTIONS[0], ...parsed.data },
-      source: 'sample',
-    })
+    // 샘플 모드: 실제 저장 없이 첫 번째 샘플 기관으로 세션 발급(데모 흐름 유지)
+    const inst = { ...SAMPLE_INSTITUTIONS[0], ...rest }
+    const res = NextResponse.json({ data: inst, source: 'sample' })
+    res.cookies.set(SESSION_COOKIE, createSessionToken(inst.id, inst.name), sessionCookieOptions)
+    return res
   }
 
   try {
     const supabase = createAdminSupabaseClient()
     const { data, error } = await supabase
       .from('institutions')
-      .insert(parsed.data)
+      .insert(insertData)
       .select()
       .single()
 
     if (error) throw error
-    return NextResponse.json({ data, source: 'db' }, { status: 201 })
+    // 등록 직후 자동 로그인 (세션 쿠키 발급)
+    const res = NextResponse.json({ data, source: 'db' }, { status: 201 })
+    res.cookies.set(SESSION_COOKIE, createSessionToken(data.id, data.name), sessionCookieOptions)
+    return res
   } catch (err) {
     console.error('[POST /api/institutions]', err)
     return NextResponse.json({ error: '기관 등록 중 오류가 발생했습니다.' }, { status: 500 })
