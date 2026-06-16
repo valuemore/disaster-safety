@@ -92,6 +92,10 @@ export interface AiInput {
     has_outdoor_playground: boolean
     cooling_space_count: number
     water_available: boolean
+    /** 당일 실제 재원·등원 유아 수 (집계값, 선택). null이면 미입력. */
+    today_present_children: number | null
+    /** 당일 실제 출근 교직원 수 (집계값, 선택). null이면 미입력. */
+    today_present_staff: number | null
   }
   // 유형별 optional 프로필 — 해당 유형일 때만 존재, 나머지는 undefined
   heatwave_profile?: HeatwaveProfileWhitelist
@@ -143,6 +147,8 @@ export function buildAiInput(
       has_outdoor_playground: institution.has_outdoor_playground,
       cooling_space_count: institution.cooling_space_count,
       water_available: institution.water_available,
+      today_present_children: draft.today_children_count ?? null,
+      today_present_staff: draft.today_staff_count ?? null,
     },
     selected_situations: draft.selected_situations,
     situation_etc: draft.situation_etc || null,

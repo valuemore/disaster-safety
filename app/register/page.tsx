@@ -96,8 +96,8 @@ export default function RegisterPage() {
         return
       }
       await refresh()
-      toast.success('기관이 등록되었습니다. 담당자 연락처를 등록하세요.')
-      router.push('/account/contacts')
+      toast.success('기관이 등록되었습니다. 재난 대응 프로필을 입력하세요.')
+      router.push(`/institutions/${json.data.id}/profile?onboarding=1`)
     } catch {
       toast.error('네트워크 오류가 발생했습니다.')
       setSubmitting(false)

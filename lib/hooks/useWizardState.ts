@@ -17,6 +17,8 @@ const EMPTY_DRAFT: WizardDraft = {
   disaster_message_issued_at: null,
   selected_situations: [],
   situation_etc: '',
+  today_children_count: null,
+  today_staff_count: null,
 }
 
 function load(): WizardDraft {

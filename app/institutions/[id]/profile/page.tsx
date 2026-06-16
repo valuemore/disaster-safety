@@ -1,5 +1,7 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ProfileForm } from '@/components/institutions/ProfileForm'
+import { Button } from '@/components/ui/button'
 import { SafetyNotice } from '@/components/common/SafetyNotice'
 import { ProfileTypeTabs } from '@/components/institutions/ProfileTypeTabs'
 import { StaffRecommendationSection } from '@/components/institutions/StaffRecommendationSection'
@@ -10,7 +12,7 @@ import type { DisasterType } from '@/lib/disaster/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ disaster_type?: string }>
+  searchParams: Promise<{ disaster_type?: string; onboarding?: string }>
 }
 
 async function getInstitution(id: string): Promise<Institution | null> {
@@ -40,7 +42,8 @@ const DISASTER_TYPE_LABELS: Record<DisasterType, string> = {
 
 export default async function ProfilePage({ params, searchParams }: PageProps) {
   const { id } = await params
-  const { disaster_type } = await searchParams
+  const { disaster_type, onboarding } = await searchParams
+  const isOnboarding = onboarding === '1'
 
   // 유효한 재난유형만 허용, 기본값 heatwave
   const disasterType: DisasterType =
@@ -91,6 +94,19 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
           staff_profile: institution.staff_profile,
         }}
       />
+
+      {/* 온보딩 동선: 프로필 저장 후 담당자 연락처 등록으로 이동 */}
+      {isOnboarding && (
+        <div className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-medium">기관 등록이 거의 완료되었습니다.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            재난유형별 프로필을 저장한 뒤, 대응계획을 공유할 담당자 연락처를 등록하세요.
+          </p>
+          <Link href="/account/contacts">
+            <Button className="mt-3 w-full min-h-[44px]">다음: 담당자 연락처 등록 →</Button>
+          </Link>
+        </div>
+      )}
 
       <div className="mt-6">
         <SafetyNotice />

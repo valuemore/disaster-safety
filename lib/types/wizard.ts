@@ -18,4 +18,8 @@ export interface WizardDraft {
   disaster_message_issued_at: string | null
   selected_situations: SituationCode[]
   situation_etc: string
+  /** 당일 실제 재원·등원 유아 수 (동적 집계값, 선택). 미입력 시 null → 기관 등록 정원 사용. */
+  today_children_count: number | null
+  /** 당일 실제 출근 교직원 수 (동적 집계값, 선택). */
+  today_staff_count: number | null
 }

@@ -23,6 +23,12 @@ export function SituationPicker() {
 
   const [selected, setSelected] = useState<SituationCode[]>(draft.selected_situations)
   const [etcText, setEtcText] = useState(draft.situation_etc)
+  const [todayChildren, setTodayChildren] = useState<string>(
+    draft.today_children_count != null ? String(draft.today_children_count) : ''
+  )
+  const [todayStaff, setTodayStaff] = useState<string>(
+    draft.today_staff_count != null ? String(draft.today_staff_count) : ''
+  )
   const [submitting, setSubmitting] = useState(false)
 
   function toggle(code: SituationCode) {
@@ -50,13 +56,23 @@ export function SituationPicker() {
     if (!isValid) return
     setSubmitting(true)
 
-    update({ selected_situations: selected, situation_etc: etcText.trim() })
+    const todayChildrenNum = todayChildren.trim() === '' ? null : Number(todayChildren)
+    const todayStaffNum = todayStaff.trim() === '' ? null : Number(todayStaff)
+
+    update({
+      selected_situations: selected,
+      situation_etc: etcText.trim(),
+      today_children_count: todayChildrenNum,
+      today_staff_count: todayStaffNum,
+    })
 
     try {
       const wizardData = {
         ...get(),
         selected_situations: selected,
         situation_etc: etcText.trim(),
+        today_children_count: todayChildrenNum,
+        today_staff_count: todayStaffNum,
       }
       const res = await fetch('/api/plan/generate', {
         method: 'POST',
@@ -163,6 +179,48 @@ export function SituationPicker() {
           )}
         </div>
       )}
+
+      {/* 당일 운영 인원 (선택) — AI가 정원 대신 실제 규모로 대응 강도 조정 */}
+      <div className="rounded-lg border bg-muted/40 p-3">
+        <p className="mb-2 text-sm font-medium">오늘 운영 인원 <span className="font-normal text-muted-foreground">(선택)</span></p>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label htmlFor="today-children" className="mb-1 block text-xs text-muted-foreground">
+              당일 재원·등원 유아 수
+            </label>
+            <input
+              id="today-children"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={9999}
+              value={todayChildren}
+              onChange={(e) => setTodayChildren(e.target.value.replace(/\D/g, ''))}
+              placeholder="예: 72"
+              className="w-full rounded-md border bg-background px-2.5 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="today-staff" className="mb-1 block text-xs text-muted-foreground">
+              당일 출근 교직원 수
+            </label>
+            <input
+              id="today-staff"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={999}
+              value={todayStaff}
+              onChange={(e) => setTodayStaff(e.target.value.replace(/\D/g, ''))}
+              placeholder="예: 12"
+              className="w-full rounded-md border bg-background px-2.5 py-2 text-sm"
+            />
+          </div>
+        </div>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          입력하면 등록 정원 대신 실제 인원 기준으로 대응 우선순위를 조정합니다. (집계 숫자만, 개인정보 입력 금지)
+        </p>
+      </div>
 
       {/* 생성 버튼 */}
       <Button
