@@ -1,8 +1,9 @@
 # 04_AI_PROMPT_SPEC — AI 프롬프트 명세 (Anthropic Claude)
 
-> 목적: 재난문자(또는 기관 내 상황 입력) + 기관 집계정보 + 현재 상황을 입력받아 **역할별 체크리스트·학부모 안내문·사후기록 초안**을 **JSON으로** 생성한다.
+> 목적: 재난문자(또는 기관 내 상황 입력) + 기관 집계정보 + 현재 상황을 입력받아 **역할별 대응계획(읽기형)·학부모 안내문**을 **JSON으로** 생성한다. AI는 또한 재난문자 원문에서 **재난유형을 자동 분류**한다.
 > 제공자: **Anthropic Claude**(기본 `claude-haiku-4-5`, 고품질 필요 시 `claude-sonnet-4-6`). 호출은 **Next.js Server Route**에서 수행.
 > 절대 원칙: **개인식별정보 미전송**, **의료 진단 금지**, **공식기관 우선**, **JSON-only 출력**, **실패 시 유형별 샘플 fallback**.
+> R-series 변경: 결과는 **읽기형 대응계획**(체크리스트 토글·사후기록 제거), 재난유형은 **자동 분류**, 재난문자 입력은 **실시간 조회/원문 붙여넣기**(화면 샘플 선택 제거).
 > 지원 재난유형: **폭염(heatwave) · 집중호우(heavy_rain) · 감염병(infection)** — 3종.
 > 지원 역할: **원장(director) · 담임교사(homeroom_teacher) · 통학버스담당자(bus_manager) · 조리사/급식담당자(cook_or_food_service) · 보건담당자(health_manager)** — 5종.
 
@@ -16,13 +17,21 @@ lib/ai/
   buildSystemPrompt.ts   # 공통 + registry[type].policyBlock 조립, OUTPUT_SCHEMA_HINT
   aiPlanSchema.ts        # 공통 출력 스키마 (role_based_actions 배열 기반)
   buildAiInput.ts        # disaster_type 동적, 유형별 profile JSONB 직렬화(화이트리스트)
-  callClaude.ts          # 호출 / 1회 재시도 / 유형별 샘플 fallback
+  callClaude.ts          # 호출 / 단일 시도(타임아웃 45s) / 유형별 샘플 fallback
+  classifyDisaster.ts    # 재난문자 원문 → 재난유형 AI 보조 분류(경량 1콜)
   legacyAdapter.ts       # 파생 getter (director_checklist 등 하위 호환)
   disaster/
     heatwave.ts          # 폭염 policy block + output guidance (역할별 가이드)
     heavyRain.ts         # 집중호우 policy block + output guidance
     infection.ts         # 감염병 policy block + output guidance + 추가 안전규칙
 ```
+
+### 1.1 재난유형 자동 분류
+
+재난문자 입력 시 `POST /api/plan/classify`가 유형을 결정한다.
+1. **키워드 분류**(`lib/external/disasterSms.ts`의 `classifyFromText`): 폭염/호우/감염 키워드 정규식 1차.
+2. 1차가 `'other'`면 **AI 보조 분류**(`classifyDisaster.ts`, max_tokens 8, 단어 1개 응답).
+3. 그래도 `'other'`면 사용자가 3유형 중 수동 선택(UI 폴백). `USE_SAMPLE_FALLBACK`/키 미설정 시 AI 보조는 건너뜀.
 
 ---
 
@@ -51,7 +60,9 @@ lib/ai/
     "has_shuttle": true,
     "has_outdoor_playground": true,
     "cooling_space_count": 5,
-    "water_available": true
+    "water_available": true,
+    "today_present_children": 72,
+    "today_present_staff": 12
   },
   "heatwave_profile": {
     "heat_vulnerable_count": 3,
@@ -117,7 +128,9 @@ lib/ai/
 }
 ```
 
-- `disaster_message`는 감염병에서 `null` 허용 (재난문자 없이 기관 내 상황만으로 AI 생성 가능).
+- `disaster_message.source`는 `'manual'`(원문 붙여넣기) 또는 `'api'`(실시간 조회). 화면 샘플 선택은 폐지(`'sample'` source 제거).
+- `disaster_message`의 `raw_text`는 빈 문자열/`null` 허용 (재난문자 없이 기관 내 상황만으로 AI 생성 가능).
+- `institution.today_present_children` / `today_present_staff`: 당일 실제 운영 인원(집계값, 선택). null이면 미입력 — 등록 정원 기준.
 - `weather_context`는 폭염/집중호우에서 공공 API 연동 시 실데이터, 미연동/실패 시 샘플. 감염병은 해당 없음.
 - `selected_situations`는 재난유형별 코드값(11 문서 §6) 최대 3개.
 
@@ -141,13 +154,6 @@ lib/ai/
     }
   ],
   "parent_notice": "학부모 안내문(공포 금지, 안정감, 구체 행동, 특정 개인 지목 금지)",
-  "after_action_draft": {
-    "checked_items": {
-      "항목키": "null 또는 권고 메모"
-    },
-    "notes": "특이사항 초안(개인식별정보 금지)",
-    "improvement": "개선 필요사항 초안"
-  },
   "emergency_contact_guide": "응급 연락 안내(119 등 공식 채널 우선)",
   "official_priority_notice": "공식기관 지시 우선 안내문",
   "safety_disclaimer": "공식 재난문자와 기관 입력정보를 바탕으로 한 대응지원 정보이며, 위급상황에서는 공식기관 지시와 119 안내를 우선합니다."
@@ -158,8 +164,9 @@ lib/ai/
 
 - **검증**: 서버에서 **zod 스키마**(`AiPlanSchema`)로 파싱·검증.
 - `role_based_actions` 배열은 최소 1개 이상. `actions`는 빈 배열 허용("해당 없음" 처리).
+- 결과 화면(`PlanResult`)은 역할별 **읽기 전용**으로 렌더 — 체크박스 토글·진행률·`checklist_items` 저장 폐지.
 - `safety_disclaimer`는 항상 고정 문구를 서버에서 강제 주입·덮어쓰기.
-- `after_action_draft.checked_items`는 재난유형별 동적 키-값 (`z.record(z.string(), z.string().nullable())`).
+- **`after_action_draft`(사후기록 초안)는 제거**. 스키마상 `optional`로만 잔존(기존 샘플 호환), 프롬프트 출력 힌트·화면에서 미사용.
 
 ---
 
@@ -261,20 +268,19 @@ lib/ai/
 ## 7. JSON 파싱 실패 대응 (서버 처리 순서)
 
 ```
-1) Claude 호출 → 응답 텍스트 수신
+1) Claude 호출 → 응답 텍스트 수신 (assistant prefill '{' 로 JSON-only 강제)
 2) JSON 파싱 시도 (코드블록/잡텍스트 제거 후 첫 '{'~마지막 '}' 추출)
 3) zod 스키마 검증 (AiPlanSchema)
    - 성공 → result_json 저장, is_fallback=false
-   - 실패 → 4)
-4) 1회 재시도: "직전 출력이 스키마를 위반했습니다. 지정 JSON만 다시 출력하세요." 메시지로 재요청
-5) 재시도도 실패 → 해당 재난유형 샘플 결과(fallback) 반환, is_fallback=true, UI에 '샘플 결과' 배지 + 안내
+   - 실패/타임아웃/파싱오류 → 4)
+4) 해당 재난유형 샘플 결과(fallback) 반환, is_fallback=true, UI에 '샘플 결과' 배지 + 안내
    - heatwave → lib/sample/action_results.ts SAMPLE_AI_RESULT
    - heavy_rain → lib/sample/results/heavyRain.ts SAMPLE_HEAVY_RAIN_AI_RESULT
    - infection → lib/sample/results/infection.ts SAMPLE_INFECTION_AI_RESULT
-6) safety_disclaimer는 항상 고정 문구로 서버에서 보장(덮어쓰기)
+5) safety_disclaimer는 항상 고정 문구로 서버에서 보장(덮어쓰기)
 ```
 
-- 타임아웃(12s) 초과 시에도 즉시 5)의 유형별 fallback으로 전환.
+- **단일 시도**(재시도 없음): 5역할 생성은 20s+ 소요하므로 재시도 시 함수 maxDuration(60s) 초과(504) 위험. 1차 실패 시 즉시 유형별 샘플 fallback. 타임아웃 45s.
 - `USE_SAMPLE_FALLBACK=true` 또는 `ANTHROPIC_API_KEY` 미설정 시 즉시 샘플 반환.
 - 모든 경로에서 **결과 화면은 정상 렌더**된다(데모 무중단).
 
@@ -392,3 +398,4 @@ export function ensureLegacyChecklists(result: AiPlanResult): AiPlanResult
 
 > 집중호우·감염병 샘플 출력은 `lib/sample/results/heavyRain.ts`, `lib/sample/results/infection.ts` 참조.
 > 이 샘플 출력은 (a) AI 정상 출력의 형태 기준이자 (b) 파싱 실패/오프라인 시 **폭염 fallback 결과**로 그대로 사용된다.
+> 위 샘플의 `after_action_draft` 필드는 사후기록 기능 제거로 **더 이상 사용되지 않으며**(optional로만 잔존), 화면에 렌더되지 않는다.

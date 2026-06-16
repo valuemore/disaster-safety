@@ -26,12 +26,15 @@
 - 생성 단계에 **당일 재원·등원 유아수/출근 교직원수**(선택) 입력 → `buildAiInput` institution 화이트리스트(`today_present_*`)로 AI 전달.
 - 참고: 요청 세부 필드(cooling_room_count, is_lowland_area 등)는 기존 `disaster_specific` 키(cooling_ok, low_ground 등)로 이미 수집 — 개명 없이 매핑 유지.
 
+### 문서 갱신 완료 (2026-06-16)
+- `docs/00_PRD`·`02_DB_SCHEMA`·`03_API_INTEGRATION_PLAN`·`04_AI_PROMPT_SPEC`·`05_UI_FLOW` 본문을 새 흐름(로그인→자동분류→읽기계획→공유/발송)으로 갱신. CLAUDE.md·07·08 포함 전 문서 동기화.
+
 ### 남은 작업 (refinement)
-- `docs/00·02·03·04·05` 본문 갱신(새 흐름 반영)은 후속. (CLAUDE.md·07·08은 반영 완료)
 - 0004 마이그레이션 원격 적용 + 실 API(childcare/SMS/알림톡) 키 연동 검증.
+- 'other' 재난유형 UX 확정(현재: 수동 선택 폴백).
 
 ### 다음 세션 시작 프롬프트
-> "재난안전 리팩토링 후속: (1) docs/00·02·03·04·05 본문을 새 흐름(로그인→자동분류→읽기계획→공유)으로 갱신, (2) 0004 마이그레이션 원격 적용 후 실연동(childcare/SMS/알림톡) 키 검증, (3) 'other' 재난유형 UX 확정. 계획: ~/.claude/plans/vivid-orbiting-leaf.md, 현황: docs/07_CONTEXT_LEDGER.md R-series."
+> "재난안전 리팩토링 후속: (1) 0004 마이그레이션 원격 적용 후 실연동(childcare/SMS/알림톡) 키 검증, (2) 'other' 재난유형 UX 확정. 계획: ~/.claude/plans/vivid-orbiting-leaf.md, 현황: docs/07_CONTEXT_LEDGER.md R-series."
 
 ---
 

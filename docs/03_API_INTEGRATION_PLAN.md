@@ -3,7 +3,7 @@
 > 방침: 공공 API 연동은 **가산점**이며 **필수가 아니다**. **모든 API는 실패 시 샘플 데이터 모드로 자동 전환**되어야 하고, 데모 흐름은 절대 끊기지 않는다.
 > 모든 외부 호출은 **Next.js Server Route(서버)에서만** 수행한다(키 노출 방지, CORS 회피, 캐시·타임아웃 일원화).
 > 확정 결정: **가능한 많이 연동**하되, 우선순위에 따라 단계적으로 붙이고 fallback을 먼저 보장한다.
-> 최종 갱신: **2026-06-16** (P6 연동 완료 + 3유형 확장 반영)
+> 최종 갱신: **2026-06-16** (R-series 반영 — 어린이집포털 API 연동·재난유형 자동분류·발송(SMS/알림톡) 추가)
 
 ---
 
@@ -27,11 +27,14 @@
 | 2 | **기상청 초단기예보 조회서비스** | 기관 좌표 기준 현재 기온/체감/습도 → AI 근거 보강 | 중 | **高** | 샘플 기상값(예: 체감 35℃) | **완료** |
 | 3 | **기상청 폭염영향예보 V2** | 폭염 영향 등급/위험수준 → 우선순위 산정 근거 | 중 | 中 | 샘플 영향등급(주의/경고) | **완료** |
 | 4 | **행안부 긴급재난문자 API (DSSP-IF-00247)** | 지역 실제 재난문자 자동 수집 — **3유형 유형 분류·필터** | 중~상 | 中 | 샘플 재난문자 3유형 × 3종 | **완료** |
-| 5 | **한국사회보장정보원 어린이집 정보 API** | 어린이집 기관 정보 자동 입력 | 상 | 低 | 수기 입력 + 샘플 기관 | MVP 제외 |
-| 6 | **한국교육학술정보원 유치원 공시정보 API** | 유치원 기관 정보 자동 입력 | 상 | 低 | 수기 입력 + 샘플 기관 | MVP 제외 |
+| 5 | **어린이집정보공개포털 API** | 기관 등록 시 정보 자동 입력(현원·연령별·교직원·좌표 등) | 상 | **高** | 예시 후보 fallback | **완료(R-series)** |
+| 6 | **유치원알리미 API** | 유치원 기관 정보 자동 입력 | 상 | 中 | 예시 후보 fallback | **완료(R-series)** |
+| 7 | **문자(SMS) 발송 API** | 역할별 담당자에게 대응계획 링크 발송 | 중 | 中 | 발송 시뮬레이션 | **구조 완료** |
+| 8 | **카카오 알림톡 API** | 역할별 담당자 알림톡 발송 | 상 | 中 | SMS fallback → 시뮬레이션 | **구조 완료(채널 승인 필요)** |
 
-> 연동 완료: 1→2→3→4. 5·6은 공공데이터포털 신청·승인 지연이 커서 후순위 제외.
+> 연동 완료: 1→2→3→4→5→6. 7·8은 구조 구현 완료(키·채널 승인 확보 전 시뮬레이션 fallback).
 > 감염병 관련 공공 API(질병관리청 감염병 통계 등)는 **MVP 연동 비필수** — 기관 내 상황 입력과 보건당국 안내문자(행안부 API 경유)로 대체.
+> 재난유형은 재난문자 입력 시 **자동 분류**(키워드 + AI 보조, §3.7).
 
 ---
 
@@ -117,8 +120,29 @@ export async function fetchRecentDisasterSms(
 
 > 감염병: 재난문자 없이 기관 내 유증상 상황 입력만으로 AI 생성 가능(`disaster_message_text` 옵션화). 보건당국 안내문자는 행안부 API를 통해 선택적으로 조회 가능.
 
-### 3.5 / 3.6 어린이집·유치원 정보 API (MVP 제외)
-- 신청·승인·키 발급 지연이 커서 MVP 제외. 수기 입력 폼 + 시드 기관으로 충분.
+### 3.5 / 3.6 어린이집정보공개포털·유치원알리미 API (완료, R-series)
+- **역할**: 기관 등록 시 기관명/유형으로 검색 → 후보 선택 시 기본정보 자동 채움.
+- **구현**: `lib/external/childcareInfo.ts` + `app/api/external/childcare/route.ts`.
+- **엔드포인트(내부)**: `GET /api/external/childcare?q=&type=&code=` → `{ data: ChildcareInstitutionInfo[], source }`.
+- **키**: `CHILDCARE_API_KEY`(어린이집) / `KINDERGARTEN_API_KEY`(유치원). 미설정 시 예시 후보 fallback.
+- **정규화**: 응답 키 대소문자 변형(`La`/`la`, `Crtelno`/`crtelno` 등) 흡수. 활용 필드 `stcode`·`crname`·`craddr`·`la`/`lo`·`crcapat`·`crchcnt`·연령별 아동수·반수·`em_cnt_*`·`crcargbname`. 원본은 `institutions.api_raw` 보존.
+- **파생값**: `infant_total_count`, `preschool_total_count`, `special_support_count_api`, `child_count_source`.
+- **역할 자동활성화 근거**: 간호사/간호조무사>0→보건, 영양사/조리원>0→조리·급식, 통학차량 운영→통학버스, 특수교사/특수장애아동>0→특별지원 강화(법적 단정 금지).
+- **개인정보**: 개별 유아 이름·진단명 미저장. 특수장애 아동수는 집계값만.
+
+### 3.7 재난유형 자동 분류 (R-series)
+- **역할**: 재난문자 원문 → 재난유형(`heatwave`/`heavy_rain`/`infection`) 결정. 수동 선택 단계 폐지.
+- **구현**: `app/api/plan/classify/route.ts` — 1차 키워드(`classifyFromText`) → `'other'`면 AI 보조(`lib/ai/classifyDisaster.ts`, max_tokens 8).
+- **엔드포인트(내부)**: `POST /api/plan/classify { raw_text }` → `{ disaster_type, source: 'keyword'|'ai'|'none'|'sample' }`.
+- **fallback**: `USE_SAMPLE_FALLBACK`/키 미설정 시 AI 보조 생략. `'other'`면 UI에서 수동 선택.
+
+### 3.8 발송 — 문자(SMS) / 카카오 알림톡 (구조 완료, R-series)
+- **역할**: 대응계획 공유 링크를 역할별 담당자에게 발송.
+- **구현**: `lib/external/notify.ts` + `app/api/plan/[id]/notify/route.ts`.
+- **우선순위**: 알림톡(consent_kakao + 키) → 실패/미사용 시 SMS(consent_sms + 키) → 키 미설정/`USE_SAMPLE_FALLBACK` 시 발송 시뮬레이션(`source:'sample'`).
+- **게이트**: `institution_staff_contacts`에서 `is_active` + 채널별 수신동의(consent_*)인 담당자만 대상.
+- **개인정보**: 발송 본문에 유아 PII 미포함(역할명 + 공유 링크만). 알림톡 실발송은 사업자 채널·발신프로필·템플릿 승인 필요.
+- **키**: `KAKAO_ALIMTALK_API_KEY`/`KAKAO_ALIMTALK_SENDER_KEY`, `SMS_API_KEY`/`SMS_API_SENDER`, `APP_BASE_URL`(링크 도메인).
 
 ---
 
@@ -145,9 +169,8 @@ export async function fetchRecentDisasterSms(
 | 집중호우 (`heavy_rain`) | 3종 | 호우경보/호우주의보/강풍 |
 | 감염병 (`infection`) | 2종 | 보건당국 안내 (감염병 확진 단정 표현 없음) |
 
-- `getSampleMessagesByType(type)` 함수로 유형별 샘플 자동 선택.
-- UI는 `source` 메타로 "실데이터/샘플" 배지를 표시(투명성 + 데모 설명).
-- **핵심 흐름(AI 생성·결과·사후기록)은 어떤 외부 API 없이도 100% 동작**해야 한다.
+- 재난문자 샘플은 실시간 조회 fallback의 백엔드 원본으로만 사용(화면에 "샘플 선택" UI 없음).
+- **핵심 흐름(로그인·자동분류·AI 생성·결과·공유/발송)은 어떤 외부 API 없이도 100% 동작**해야 한다(`USE_SAMPLE_FALLBACK=true` 시 smoke-test 30/30 PASS).
 
 ---
 
@@ -164,10 +187,15 @@ export async function fetchRecentDisasterSms(
 | `GEOCODE_API_KEY` | 카카오 로컬 주소·좌표 변환 | 서버 전용 |
 | `KMA_API_KEY` | 기상청(초단기예보/폭염영향예보 V2) | 서버 전용 |
 | `MOIS_DISASTER_API_KEY` | 행안부 긴급재난문자 (DSSP-IF-00247) | 서버 전용 |
-| `CHILDCARE_API_KEY` | 어린이집 정보(선택, MVP 제외) | 서버 전용 |
-| `KINDERGARTEN_API_KEY` | 유치원 공시(선택, MVP 제외) | 서버 전용 |
+| `CHILDCARE_API_KEY` | 어린이집정보공개포털 (R-series 연동) | 서버 전용 |
+| `KINDERGARTEN_API_KEY` | 유치원알리미 (R-series 연동) | 서버 전용 |
+| `SESSION_SECRET` | 기관 로그인 세션 쿠키 HMAC 서명키 | 서버 전용, 프로덕션 필수 |
+| `ADMIN_ACCESS_KEY` | 관리자 접근 키(기관 로그인과 분리) | 서버 전용, 선택 |
+| `APP_BASE_URL` | 공유 링크·발송 본문 기본 URL | 선택 |
+| `KAKAO_ALIMTALK_API_KEY` / `KAKAO_ALIMTALK_SENDER_KEY` | 카카오 알림톡 발송 | 서버 전용, 선택(채널 승인 필요) |
+| `SMS_API_KEY` / `SMS_API_SENDER` | 문자(SMS) 발송 | 서버 전용, 선택 |
 
-> 모든 외부 키는 **미설정 시 자동 샘플 모드**로 동작하도록 `lib/env.ts`에서 분기한다(키 없어도 빌드·데모 가능).
+> 모든 외부 키는 **미설정 시 자동 샘플/시뮬레이션 모드**로 동작하도록 `lib/env.ts`에서 분기한다(키 없어도 빌드·데모 가능).
 
 ---
 

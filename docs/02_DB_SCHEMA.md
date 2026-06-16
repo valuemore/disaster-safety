@@ -1,25 +1,28 @@
 # 02_DB_SCHEMA — 데이터베이스 설계 (Supabase PostgreSQL)
 
 > 대상: Supabase PostgreSQL. 모든 PK는 `uuid`(`gen_random_uuid()`), 모든 테이블에 `created_at timestamptz default now()`.
-> **개인정보 원칙(필수)**: 유아 이름·진단명·약물명·보호자 연락처 컬럼은 **존재하지 않는다**. 취약 유아 정보는 **숫자 집계값**만 저장한다. 자유텍스트 컬럼에도 개인식별정보 입력을 금지한다(앱·프롬프트 차원 차단).
-> 최종 갱신: **2026-06-16** (0002/0003 마이그레이션 완료 반영 — 3유형·5역할 확장)
+> **개인정보 원칙(필수)**: 유아 이름·진단명·약물명·**보호자(학부모) 연락처** 컬럼은 **존재하지 않는다**. 취약 유아 정보는 **숫자 집계값**만 저장한다. 자유텍스트 컬럼에도 개인식별정보 입력을 금지한다(앱·프롬프트 차원 차단).
+> **예외(2026-06-16, D-006)**: 공유·발송 목적의 **교직원 업무 연락처**는 수신동의와 함께 `institution_staff_contacts`에만 저장(anon 미노출). 학부모 연락처는 계속 금지.
+> 최종 갱신: **2026-06-16** (0004 마이그레이션 반영 — 간편 로그인·역할별 연락처·공유 토큰·포털 API 컬럼)
 
 ---
 
 ## 1. ERD 개요
 
 ```
-institutions (1) ──< (N) institution_risk_profiles    [0002 신규 — 3유형 범용 프로필]
-institutions (1) ──< (N) heatwave_profiles            [레거시 — 호환 뷰 유지, 제거 검토 예정]
-institutions (1) ──< (N) disaster_messages            [기관이 입력/선택한 재난문자]
-institutions (1) ──< (N) action_requests
+institutions (1) ──< (N) institution_risk_profiles      [0002 — 3유형 범용 프로필]
+institutions (1) ──< (N) institution_staff_contacts     [0004 신규 — 역할별 담당자 연락처]
+institutions (1) ──< (N) heatwave_profiles              [레거시 — 호환 뷰 유지]
+institutions (1) ──< (N) disaster_messages              [기관이 입력/선택한 재난문자]
+institutions (1) ──< (N) action_requests                [share_token 0004]
 disaster_messages (1) ──< (N) action_requests
-institution_risk_profiles (1) ──< (N) action_requests  [risk_profile_id FK, 0002 신규]
-action_requests (1) ──< (N) checklist_items
-action_requests (1) ──< (1) after_action_records
+institution_risk_profiles (1) ──< (N) action_requests   [risk_profile_id FK]
+action_requests (1) ──< (N) notify_logs                 [0004 신규 — 발송 로그]
+action_requests (1) ──< (N) checklist_items             [@deprecated — 미사용, 보존]
+action_requests (1) ──< (1) after_action_records        [@deprecated — 미사용, 보존]
 ```
 
-> 설계 메모: 체크리스트는 **(a) `action_requests.result_json` 안에 통째로 보관**하고, 동시에 **(b) `checklist_items` 테이블로 정규화**해 체크 상태(완료여부)를 갱신·집계할 수 있게 둔다. MVP 데모는 (a)만으로도 렌더 가능하며, (b)는 체크 토글·진행률 표시에 사용한다.
+> 설계 메모(R-series): 역할별 대응계획은 **`action_requests.result_json.role_based_actions`(읽기 전용)**으로만 제공한다. `checklist_items`·`after_action_records` 테이블은 **체크리스트 토글/사후기록 기능 제거로 더 이상 쓰지 않으나**, 데이터 보호·롤백 안전을 위해 DROP하지 않고 보존한다(추후 0005에서 제거 검토).
 
 ---
 
@@ -30,6 +33,7 @@ action_requests (1) ──< (1) after_action_records
 | `supabase/migrations/0001_initial.sql` | 기초 6개 테이블(institutions, heatwave_profiles, disaster_messages, action_requests, checklist_items, after_action_records), RLS, 트리거, 시드 | 완료 |
 | `supabase/migrations/0002_disaster_expansion.sql` | institution_risk_profiles 신규, staff_profile 컬럼, disaster_type CHECK 3종, checklist_items.role 5종 확장, risk_profile_id, after_action checked_items, heatwave 데이터 이관 | 완료 (원격 DB 적용) |
 | `supabase/migrations/0003_role_expansion.sql` | cook_or_food_service·health_manager 역할 관련 추가 확장 (필요 시) | 참조용 |
+| `supabase/migrations/0004_auth_and_sharing.sql` | institutions 인증/포털 컬럼(login_id·pin_hash·external_code·api_raw·child_count_source), institution_staff_contacts 신규, action_requests.share_token, notify_logs 신규 | 작성 완료 (**원격 DB 미적용** — 사용자 확인 후 실행) |
 
 ---
 
@@ -56,10 +60,16 @@ action_requests (1) ──< (1) after_action_records
 | cooling_space_count | int default 0 | 냉방 가능 공간 수 |
 | water_available | boolean default false | 물 공급 가능 여부 |
 | **staff_profile** | **jsonb default '{}'** | **급식·보건 인력 정보 (0002 신규). `lib/staff/types.ts` StaffProfile 타입. PII 없음: 인력 유무·수·유형만.** |
+| **login_id** | **text** | **간편 로그인 식별번호 (0004). 부분 유니크 인덱스(NOT NULL일 때).** |
+| **pin_hash** | **text** | **PIN 해시 (0004, scrypt). 서버 전용 — 클라이언트 직렬화 금지.** |
+| **pin_set_at** | **timestamptz** | **PIN 설정 시각 (0004).** |
+| **external_code** | **text** | **어린이집정보공개포털 식별코드(stcode) (0004).** |
+| **api_raw** | **jsonb** | **포털 API 원본 JSON 보존 (0004). CCTV 등 저우선 필드 포함. PII 미포함.** |
+| **child_count_source** | **text** | **아동수 출처: `'api'`/`'user_corrected'` (0004).** |
 | created_at | timestamptz default now() | |
 | updated_at | timestamptz default now() | 트리거로 갱신 |
 
-- **인덱스**: `(sido, sigungu)`, `(type)`, `(created_at)`.
+- **인덱스**: `(sido, sigungu)`, `(type)`, `(created_at)`, 부분 유니크 `(login_id) where login_id is not null`.
 - **관계**: 1:N → institution_risk_profiles, heatwave_profiles(레거시), disaster_messages, action_requests.
 
 #### staff_profile JSONB 구조 (`lib/staff/types.ts` StaffProfile)
@@ -209,13 +219,16 @@ action_requests (1) ──< (1) after_action_records
 | result_json | jsonb NOT NULL | AI 출력 전체(04 스키마, `role_based_actions` 포함). fallback 결과도 동일 형식 저장 |
 | is_fallback | boolean default false | 샘플 fallback로 생성됐는지 |
 | model | text | 사용 모델명(예: `claude-haiku-4-5`) 또는 `'sample'` |
-| **created_by_role** | **text** | `'admin'`/`'director'`/`'teacher'`/`'shuttle'`/`'cook_or_food_service'`/`'health_manager'` (시연용 역할) |
+| **created_by_role** | **text** | `'admin'`/`'director'`/`'teacher'`/`'shuttle'`/`'cook_or_food_service'`/`'health_manager'`. R-series 흐름에서는 기관 로그인=원장 컨텍스트로 `'director'` 기록. |
+| **share_token** | **text** | **공유 링크 토큰 (0004). 부분 유니크. 공개 라우트 `/share/[token]/[role]` 식별자.** |
 | created_at | timestamptz default now() | |
 
-- **인덱스**: `(institution_id, created_at desc)`, `(priority)`, `(created_at)`, GIN `(result_json)` (선택).
-- **관계**: 1:N → checklist_items, 1:1 → after_action_records.
+- **인덱스**: `(institution_id, created_at desc)`, `(priority)`, `(created_at)`, 부분 유니크 `(share_token) where share_token is not null`, GIN `(result_json)` (선택).
+- **관계**: 1:N → notify_logs. (checklist_items·after_action_records는 @deprecated — 미사용 보존.)
 
-### 3.6 `checklist_items` — 역할별 체크리스트 항목
+### 3.6 `checklist_items` — 역할별 체크리스트 항목 (**@deprecated — R-series 미사용, 보존**)
+> 체크리스트 토글 기능 제거로 신규 흐름에서는 INSERT/조회하지 않는다. 테이블은 보존(추후 0005 DROP 검토). 역할별 대응계획은 `result_json.role_based_actions`로 제공.
+
 | 컬럼 | 타입 | 비고 |
 |---|---|---|
 | id | uuid PK | |
@@ -231,7 +244,9 @@ action_requests (1) ──< (1) after_action_records
 - **역할 키 매핑**: AI/타입 레벨 역할 키(`homeroom_teacher` → `teacher`, `bus_manager` → `shuttle`)는 `lib/disaster/types.ts`의 `ROLEKEY_TO_DB_ROLE`으로 DB 저장 시 변환. `cook_or_food_service`·`health_manager`는 그대로 저장.
 - **메모**: `result_json`의 `role_based_actions`를 펼쳐 INSERT. 데모에서 체크 토글·진행률 집계에 사용.
 
-### 3.7 `after_action_records` — 사후기록
+### 3.7 `after_action_records` — 사후기록 (**@deprecated — R-series 미사용, 보존**)
+> 사후기록 기능 제거로 신규 흐름에서는 사용하지 않는다. 테이블은 보존(추후 0005 DROP 검토).
+
 | 컬럼 | 타입 | 비고 |
 |---|---|---|
 | id | uuid PK | |
@@ -251,7 +266,41 @@ action_requests (1) ──< (1) after_action_records
 | created_at | timestamptz default now() | |
 
 - **인덱스**: `(institution_id, created_at desc)`, `(action_request_id)`.
-- **폭염 레거시 boolean 5개**: 기존 행 호환을 위해 유지. 신규 대응계획(P8 이후)은 `checked_items` JSONB 사용.
+- **폭염 레거시 boolean 5개**: 기존 행 호환을 위해 유지.
+
+### 3.8 `institution_staff_contacts` — 역할별 담당자 연락처 (**0004 신규**)
+| 컬럼 | 타입 | 비고 |
+|---|---|---|
+| id | uuid PK | `gen_random_uuid()` |
+| institution_id | uuid NOT NULL FK → institutions(id) ON DELETE CASCADE | |
+| role | text NOT NULL | CHECK(`'director'`/`'homeroom_teacher'`/`'bus_manager'`/`'cook_or_food_service'`/`'health_manager'`) — **AI/RoleKey 정본 키 사용** |
+| name | text | 담당자명/직함 |
+| phone | text | 휴대폰 (교직원 업무 연락처) |
+| email | text | 이메일 |
+| consent_sms | boolean default false | 문자 수신 동의 |
+| consent_kakao | boolean default false | 알림톡 수신 동의 |
+| consent_share_link | boolean default false | 공유 링크 수신 동의 |
+| is_active | boolean default true | 사용 여부 |
+| created_at / updated_at | timestamptz default now() | |
+
+- **유니크 제약**: `(institution_id, role)` — 역할별 1건.
+- **인덱스**: `(institution_id)`.
+- **RLS**: 활성화하되 **anon SELECT 정책 없음** → service_role(서버 라우트) 전용. 연락처 노출 차단.
+- **개인정보**: 교직원 업무 연락처만(수신동의 전제). 학부모 연락처 저장 금지. AI 입력 화이트리스트엔 미포함.
+- **발송 게이트**: notify/share는 채널별 consent가 true이고 `is_active`일 때만 대상 포함.
+
+### 3.9 `notify_logs` — 발송 로그 (**0004 신규, 선택**)
+| 컬럼 | 타입 | 비고 |
+|---|---|---|
+| id | uuid PK | |
+| action_request_id | uuid FK → action_requests(id) ON DELETE CASCADE | |
+| institution_id | uuid FK → institutions(id) ON DELETE CASCADE | |
+| channel | text | `'sms'`/`'kakao'`/`'sample'`/`'mixed'` |
+| recipient_count | int default 0 | 발송 성공 건수 |
+| source | text | `'api'`/`'sample'` |
+| created_at | timestamptz default now() | |
+
+- **RLS**: 활성화, anon 정책 없음(service_role 전용).
 
 ---
 
@@ -266,7 +315,9 @@ action_requests (1) ──< (1) after_action_records
 | `institution_risk_profiles.disaster_type` | `heatwave`, `heavy_rain`, `infection` |
 | `action_requests.priority` | `high`, `medium`, `low` |
 | `action_requests.created_by_role` | `admin`, `director`, `teacher`, `shuttle`, **`cook_or_food_service`**, **`health_manager`** |
-| `checklist_items.role` | `director`, `teacher`, `shuttle`, **`cook_or_food_service`**, **`health_manager`** (0002 확장) |
+| `checklist_items.role` (@deprecated) | `director`, `teacher`, `shuttle`, `cook_or_food_service`, `health_manager` |
+| `institution_staff_contacts.role` (0004) | `director`, `homeroom_teacher`, `bus_manager`, `cook_or_food_service`, `health_manager` (RoleKey 정본) |
+| `institutions.child_count_source` (0004) | `api`, `user_corrected` |
 
 - **AI 출력 역할 키**: `director`, `homeroom_teacher`, `bus_manager`, `cook_or_food_service`, `health_manager` (DB 저장 시 `homeroom_teacher`→`teacher`, `bus_manager`→`shuttle` 변환).
 - `selected_situations` 코드값: 3유형 전체 `SituationCode` (`lib/types/db.ts` 참조).
@@ -277,7 +328,8 @@ action_requests (1) ──< (1) after_action_records
 
 ## 5. RLS(Row Level Security) 정책 초안
 
-> 인증 방식이 **시연용 역할 선택**(실제 사용자 인증 없음)이므로, 민감 키 노출 없이 안정적인 데모를 위해 다음을 권장한다.
+> 인증 방식은 **간편 기관 로그인**(등록번호+PIN, HMAC 서명 쿠키). 세션 검증은 Route Handler/Server Component의 `getSession()`에서 수행하며, 민감 쓰기/조회는 `service_role`로 처리한다.
+> **연락처(`institution_staff_contacts`)·발송로그(`notify_logs`)는 anon SELECT 정책을 부여하지 않는다**(service_role 전용). 공유 페이지(`/share/[token]/[role]`)도 서버에서 service_role로 token 조회 후 렌더.
 
 ### MVP 권장 패턴 (서버 라우트 경유)
 - 클라이언트는 `anon key`만 보유, **쓰기/민감 조회는 Next.js Server Route에서 `service_role` 키로 수행**.
@@ -313,8 +365,8 @@ create policy "read_all" on institutions for select to anon using (true);
 | heatwave_profiles | 레거시 | 0002 이관 후 기존 3건 유지(호환) |
 | disaster_messages | 3유형 × 3종 = 9종 | 폭염/집중호우/감염병 샘플. `source='sample'`. 감염병 2건은 `disaster_message_id=null` 허용 |
 | action_requests | 3 | 유형별 1건씩 (5역할 result_json, is_fallback=true 케이스 포함) |
-| checklist_items | 결과 연동 | 3유형 × 5역할 항목 펼침. 감염병: 23건(director 6, teacher 5, shuttle 2, cook 4, health 6) |
-| after_action_records | 1 | 완료 예시 1건 (checked_items JSONB 포함) |
+| ~~checklist_items~~ | — | @deprecated. 신규 시드 불필요(테이블만 보존) |
+| ~~after_action_records~~ | — | @deprecated. 신규 시드 불필요(테이블만 보존) |
 
 - 시드: `supabase/seed.sql` (멱등 — ON CONFLICT DO NOTHING, 고정 UUID).
 - `lib/sample/` TS 픽스처: institutions/heatwave_profiles/disaster_messages/action_results/heavy_rain_profiles/infection_profiles/results/*.
